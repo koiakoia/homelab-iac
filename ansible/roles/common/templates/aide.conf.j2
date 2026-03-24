@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# AIDE configuration for Project Sentinel
+
+database_in=file:/var/lib/aide/aide.db
+database_out=file:/var/lib/aide/aide.db.new
+database_new=file:/var/lib/aide/aide.db.new
+
+# Standard rule sets
+NORMAL = p+i+n+u+g+s+b+m+c+sha256
+DIR = p+i+n+u+g
+
+# Monitored paths
+/etc NORMAL
+/usr/bin NORMAL
+/usr/sbin NORMAL
+/boot NORMAL
+/lib/systemd NORMAL
+
+# Exclusions
+!/etc/mtab
+!/etc/adjtime
+!/etc/resolv.conf
+!/var/log
+!/var/spool
+!/tmp
+!/run

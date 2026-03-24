@@ -1,0 +1,99 @@
+---
+
+- name: Validate required secrets are provided
+  ansible.builtin.assert:
+    that:
+      - minio_access_key | default('') | length > 0
+      - minio_secret_key | default('') | length > 0
+    fail_msg: "Required secrets (minio_access_key, minio_secret_key) must be provided via extra-vars or vault lookup"
+  tags: [gitlab, validation]
+
+- name: Validate OIDC client secret is provided
+  ansible.builtin.assert:
+    that:
+      - gitlab_oidc_client_secret | default('') | length > 0
+    fail_msg: "gitlab_oidc_client_secret must be provided via extra-vars when OIDC is enabled"
+  when: gitlab_oidc_enabled | default(false)
+  tags: [gitlab, validation]
+
+- name: Configure /etc/hosts for internal service resolution
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "${PROXY_IP} auth.${INTERNAL_DOMAIN} gitlab.${INTERNAL_DOMAIN} auth.${DOMAIN} gitlab.${DOMAIN}"
+    state: present
+  tags: [gitlab, network]
+
+- name: Add GitLab CE repository
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+    creates: /etc/apt/sources.list.d/gitlab_gitlab-ce.list
+  tags: [gitlab]
+
+- name: Install gitlab-ce package
+  ansible.builtin.apt:
+    name: gitlab-ce
+    state: present
+    update_cache: true
+  tags: [gitlab]
+
+- name: Deploy gitlab.rb configuration
+  ansible.builtin.template:
+    src: gitlab.rb.j2
+    dest: /etc/gitlab/gitlab.rb
+    mode: "0600"
+  notify: Reconfigure gitlab
+  tags: [gitlab]
+
+- name: Deploy gitlab-backup.sh
+  ansible.builtin.template:
+    src: gitlab-backup.sh.j2
+    dest: /usr/local/bin/gitlab-backup.sh
+    mode: "0755"
+  tags: [gitlab]
+
+- name: Deploy gitlab-backup.env
+  ansible.builtin.template:
+    src: gitlab-backup.env.j2
+    dest: /etc/gitlab-backup.env
+    mode: "0600"
+  tags: [gitlab]
+
+- name: Deploy gitlab-backup systemd service
+  ansible.builtin.template:
+    src: gitlab-backup.service.j2
+    dest: /etc/systemd/system/gitlab-backup.service
+    mode: "0644"
+  notify: Daemon reload
+  tags: [gitlab]
+
+- name: Deploy gitlab-backup systemd timer
+  ansible.builtin.template:
+    src: gitlab-backup.timer.j2
+    dest: /etc/systemd/system/gitlab-backup.timer
+    mode: "0644"
+  notify: Daemon reload
+  tags: [gitlab]
+
+- name: Enable gitlab-backup timer
+  ansible.builtin.systemd:
+    name: gitlab-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [gitlab]
+
+- name: Restrict Postfix to loopback only (no external mail relay)
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: '^inet_interfaces\s*='
+    line: 'inet_interfaces = loopback-only'
+    state: present
+  notify: Restart postfix
+  tags: [gitlab, security]
+
+- name: Ensure /etc/mailname is set (suppresses Postfix warnings)
+  ansible.builtin.copy:
+    content: "ubuntu\n"
+    dest: /etc/mailname
+    mode: "0644"
+  tags: [gitlab, security]

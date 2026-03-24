@@ -1,0 +1,9 @@
+---
+- name: Configure GitLab server
+  hosts: gitlab
+  become: true
+  roles:
+    - role: common
+      tags: [common]
+    - role: gitlab-server
+      tags: [gitlab]

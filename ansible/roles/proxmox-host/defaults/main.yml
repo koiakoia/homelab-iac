@@ -1,0 +1,44 @@
+---
+# Proxmox host nftables firewall defaults
+# NIST SC-7(5): Deny by Default / Allow by Exception
+
+# Management network allowed to access PVE services
+pve_management_network: "${LAN_NETWORK}/24"
+
+# Cluster node IPs for inter-node traffic (corosync, migration)
+pve_cluster_nodes:
+  - "${PROXMOX_NODE1_IP}"
+  - "${PROXMOX_NODE2_IP}"
+  - "${PROXMOX_NODE3_IP}"
+
+# Corosync port (UDP)
+pve_corosync_port: 5405
+
+# Live migration port range (TCP)
+pve_migration_port_start: 60000
+pve_migration_port_end: 60050
+
+# PVE API port
+pve_api_port: 8006
+
+# SPICE proxy port
+pve_spice_port: 3128
+
+# VNC websocket port range
+pve_vnc_port_start: 5900
+pve_vnc_port_end: 5999
+
+# SSH port
+pve_ssh_port: 22
+
+# Wazuh manager for agent communication (outbound)
+pve_wazuh_manager: "${WAZUH_IP}"
+
+# Syslog server for remote logging (outbound)
+pve_syslog_server: "${WAZUH_IP}"
+
+# Enable nftables logging of dropped packets
+pve_nftables_log_drops: true
+
+# Rate limit for logged drops (prevent log flooding)
+pve_nftables_log_rate: "5/minute"

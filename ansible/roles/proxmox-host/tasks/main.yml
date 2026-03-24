@@ -1,0 +1,58 @@
+---
+# Proxmox host nftables firewall
+# SEC-2: NIST SC-7(5) Deny by Default
+#
+# Safety: nftables.service loads /etc/nftables.conf on start.
+# If the config is invalid, the service fails and the previous
+# kernel ruleset remains. On reboot, no rules load = open access,
+# which is the current state anyway (fail-open baseline).
+
+- name: Ensure nftables is installed
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - proxmox
+    - firewall
+    - nftables
+
+- name: Deploy nftables configuration
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify:
+    - Reload nftables
+    - Verify SSH connectivity
+    - Enable nftables on boot
+  tags:
+    - proxmox
+    - firewall
+    - nftables
+
+- name: Ensure nftables service is enabled and started
+  ansible.builtin.systemd:
+    name: nftables
+    state: started
+    enabled: true
+  tags:
+    - proxmox
+    - firewall
+    - nftables
+
+- name: Verify nftables is active
+  ansible.builtin.command:
+    cmd: nft list ruleset
+  register: nft_verify
+  changed_when: false
+  failed_when: "'table inet filter' not in nft_verify.stdout"
+  tags:
+    - proxmox
+    - firewall
+    - nftables
+    - verify

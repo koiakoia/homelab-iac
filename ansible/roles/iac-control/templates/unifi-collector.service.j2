@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=UniFi Network Data Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory={{ unifi_repo_dir }}
+Environment=UNIFI_API_KEY={{ unifi_api_key }}
+ExecStart=/usr/bin/python3 {{ unifi_repo_dir }}/collector.py
+StandardOutput=journal
+StandardError=journal

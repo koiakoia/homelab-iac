@@ -1,0 +1,17 @@
+---
+- name: Configure iac-control baseline (NIST CM-2)
+  hosts: iac_control
+  become: true
+
+  vars:
+    docker_users:
+      - ubuntu
+      - gitlab-runner
+
+  roles:
+    - role: common
+      tags: [common]
+    - role: docker-host
+      tags: [docker]
+    - role: iac-control
+      tags: [iac-control, nist-cm-2]

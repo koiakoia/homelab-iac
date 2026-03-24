@@ -1,0 +1,23 @@
+---
+vault_version: "1.21.2"
+vault_api_addr: "${VAULT_IP}"
+vault_data_dir: "/opt/vault/data"
+vault_config_dir: "/etc/vault/config"
+vault_log_dir: "/opt/vault/logs"
+vault_compose_dir: "/opt/vault"
+vault_backup_retention_days: 7
+minio_endpoint: "http://${MINIO_PRIMARY_IP}:9000"
+minio_access_key: ""
+minio_secret_key: ""
+vault_tls_enabled: true
+
+# Transit auto-unseal (via transit vault on iac-control)
+vault_transit_unseal_enabled: true
+vault_transit_address: "http://${IAC_CONTROL_IP}:8201"
+vault_transit_key_name: "autounseal"
+vault_transit_mount_path: "transit/"
+vault_transit_token: "{{ vault_transit_unseal_token | default('CHANGE_ME') }}"
+
+# Telemetry / Prometheus metrics
+vault_telemetry_enabled: true
+vault_telemetry_retention: "30s"

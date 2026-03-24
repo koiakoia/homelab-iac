@@ -1,0 +1,37 @@
+---
+plugin: netbox.netbox.nb_inventory
+api_endpoint: https://netbox.${INTERNAL_DOMAIN}
+token: "{{ lookup('env', 'NETBOX_API_TOKEN') }}"
+validate_certs: true
+
+virtual_machines: true
+devices: false
+config_context: true
+flatten_custom_fields: false
+
+virtual_machine_query_filters:
+  - has_primary_ip: true
+  - cluster: "Proxmox Cluster"
+
+compose:
+  ansible_host: primary_ip4.address | ansible.utils.ipaddr('address')
+  ansible_user: custom_fields.ansible_user if custom_fields.ansible_user else 'ubuntu'
+  ansible_ssh_private_key_file: custom_fields.ansible_ssh_key if custom_fields.ansible_ssh_key else '~/.ssh/id_sentinel'
+  ansible_become: true
+  firewall_enabled: custom_fields.firewall_enabled if custom_fields.firewall_enabled is not none else true
+  sshd_permit_root_login: custom_fields.sshd_permit_root_login if custom_fields.sshd_permit_root_login else 'no'
+  sshd_allow_groups: custom_fields.sshd_allow_groups if custom_fields.sshd_allow_groups else 'sudo'
+  auditd_enabled: custom_fields.auditd_enabled if custom_fields.auditd_enabled is not none else true
+  firewall_allowed_ports: config_context.firewall_allowed_ports | default([22])
+
+keyed_groups:
+  - key: custom_fields.ansible_group
+    separator: ""
+    prefix: ""
+    default_value: "ungrouped_netbox"
+  - key: role.slug
+    prefix: "role"
+    separator: "_"
+
+groups:
+  managed_vms: custom_fields.ansible_group is defined and custom_fields.ansible_group != ''

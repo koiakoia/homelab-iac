@@ -1,0 +1,20 @@
+---
+- name: Configure Vault server
+  hosts: vault
+  become: true
+  vars:
+    docker_users: [root]
+  roles:
+    - role: common
+      tags: [common]
+    - role: docker-host
+      tags: [docker]
+    - role: vault-server
+      tags: [vault]
+  post_tasks:
+    - name: Reminder - Vault unseal required
+      ansible.builtin.debug:
+        msg: >
+          Vault is running but SEALED. You must unseal manually using
+          Shamir keys from Proton Pass. Run: vault operator unseal
+      tags: [vault]

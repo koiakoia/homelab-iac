@@ -1,0 +1,7 @@
+---
+- name: Configure Pangolin reverse proxy
+  hosts: pangolin
+  become: true
+  roles:
+    - role: common
+      tags: [common]

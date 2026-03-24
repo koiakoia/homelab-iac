@@ -1,0 +1,306 @@
+---
+include:
+  - local: 'ci/security.yml'
+  - local: 'ci/disaster-recovery.yml'
+  - local: 'ci/compliance.yml'
+  - local: 'ci/defectdojo.yml'
+
+stages:
+  - lint
+  - security-scan
+  - upload-to-defectdojo
+  - packer-validate
+  - build-templates
+  - provision
+  - configure
+  - compliance-report
+  - disaster-recovery
+
+variables:
+  # Ansible Config
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+  ANSIBLE_FORCE_COLOR: "true"
+
+  # MinIO/S3 Backend - credentials from CI/CD variables (sourced from Vault)
+  AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+
+  # Proxmox - credentials from CI/CD variables (sourced from Vault)
+  TF_VAR_proxmox_api_token: "${PROXMOX_API_TOKEN}=${PROXMOX_TOKEN_SECRET}"
+
+  # Packer - credentials from CI/CD variables (sourced from Vault)
+  PKR_VAR_proxmox_token_secret: ${PROXMOX_TOKEN_SECRET}
+  PKR_VAR_ssh_password: ${PACKER_SSH_PASSWORD}
+
+  # Ansible secrets from CI/CD variables (sourced from Vault)
+  CLOUDFLARE_DNS_API_TOKEN: ${CLOUDFLARE_DNS_API_TOKEN}
+  PANGOLIN_SERVER_SECRET: ${PANGOLIN_SERVER_SECRET}
+  NEWT_ID: ${NEWT_ID}
+  NEWT_SECRET: ${NEWT_SECRET}
+
+# =============================================================================
+# Packer - Validate Templates
+# =============================================================================
+packer-validate:
+  stage: packer-validate
+  tags:
+    - iac
+  script:
+    - echo "Validating all Packer templates..."
+    - cd packer
+    - |
+      FAILED=0
+      for template in *.pkr.hcl; do
+        echo "--- Validating $template ---"
+        packer init "$template"
+        packer validate -syntax-only "$template"
+        if [ $? -ne 0 ]; then
+          echo "FAILED: $template"
+          FAILED=1
+        fi
+      done
+      exit $FAILED
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# =============================================================================
+# Packer - Build Golden Images (manual trigger)
+# =============================================================================
+build_golden_image:
+  stage: build-templates
+  tags:
+    - iac
+  script:
+    - echo "Building Golden Image with Packer..."
+    - cd packer
+    - packer init iac-control.pkr.hcl
+    - packer build -force iac-control.pkr.hcl
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+build-vault-template:
+  stage: build-templates
+  tags:
+    - iac
+  script:
+    - cd packer && packer init vault-server.pkr.hcl && packer build -force vault-server.pkr.hcl
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+build-gitlab-template:
+  stage: build-templates
+  tags:
+    - iac
+  script:
+    - cd packer && packer init gitlab-server.pkr.hcl && packer build -force gitlab-server.pkr.hcl
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+build-seedbox-template:
+  stage: build-templates
+  tags:
+    - iac
+  script:
+    - cd packer && packer init seedbox-vm.pkr.hcl && packer build -force seedbox-vm.pkr.hcl
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+build-forgejo-template:
+  stage: build-templates
+  tags:
+    - iac
+  script:
+    - cd packer && packer init forgejo-server.pkr.hcl && packer build -force forgejo-server.pkr.hcl
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# =============================================================================
+# Managed Layer - Terraform/OpenTofu
+# NOTE: Bootstrap layer (infrastructure/bootstrap/) is NOT managed by CI/CD
+#       It is designed for manual disaster recovery only
+# =============================================================================
+managed_plan:
+  stage: provision
+  tags:
+    - iac
+  script:
+    - echo "Planning Managed Infrastructure with OpenTofu..."
+    - cd infrastructure/managed
+    - tofu init
+    - tofu validate
+    - |
+      EXIT_CODE=0
+      tofu plan -detailed-exitcode || EXIT_CODE=$?
+      if [ $EXIT_CODE -eq 1 ]; then echo "Plan failed"; exit 1; fi
+      if [ $EXIT_CODE -eq 2 ]; then echo "Changes detected"; fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - infrastructure/managed/**/*
+        - infrastructure/modules/**/*
+
+managed_apply:
+  stage: provision
+  tags:
+    - iac
+  script:
+    - echo "Applying Managed Infrastructure with OpenTofu..."
+    - cd infrastructure/managed
+    - tofu init
+    - tofu apply -auto-approve
+  needs: ["managed_plan"]
+  when: manual
+  allow_failure: false
+  retry:
+    max: 2
+    when: script_failure
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - infrastructure/managed/**/*
+        - infrastructure/modules/**/*
+
+# =============================================================================
+# Configuration - Ansible Per-VM Rebuild Jobs (manual trigger)
+# These run the full playbook to configure a VM from scratch or fix drift.
+# =============================================================================
+rebuild-iac-control:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/iac-control.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-vault:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/vault-server.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-gitlab:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - >-
+      ansible-playbook -i inventory/hosts.ini playbooks/gitlab-server.yml
+      -e "minio_access_key=${MINIO_ACCESS_KEY}"
+      -e "minio_secret_key=${MINIO_SECRET_KEY}"
+      -e "gitlab_oidc_client_secret=${GITLAB_OIDC_CLIENT_SECRET}"
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-minio:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/minio-bootstrap.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-seedbox:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/seedbox-vm.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-config-server:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/config-server.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-crowdsec:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/crowdsec.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-wazuh:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/wazuh-server.yml
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+rebuild-forgejo:
+  stage: configure
+  tags:
+    - iac
+  script:
+    - cd ansible
+    - >-
+      ansible-playbook -i inventory/hosts.ini playbooks/forgejo-server.yml
+      -e "forgejo_db_password=${FORGEJO_DB_PASSWORD}"
+      -e "forgejo_oidc_client_secret=${FORGEJO_OIDC_CLIENT_SECRET}"
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# pangolin-proxy is intentionally excluded from CI rebuild jobs.
+# It requires manual deployment via oc apply (see CLAUDE.md).
+
+# =============================================================================
+# Bootstrap Layer - Manual DR Only (NOT for CI/CD)
+# =============================================================================
+# The bootstrap layer is intentionally NOT included in CI/CD.
+# See infrastructure/bootstrap/README.md for disaster recovery procedures.
+#
+# To manage bootstrap resources:
+#   cd infrastructure/bootstrap
+#   tofu init
+#   tofu plan
+#   tofu apply  # Only during DR recovery!

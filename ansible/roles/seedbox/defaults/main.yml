@@ -1,0 +1,8 @@
+---
+vpn_provider: "protonvpn"
+wireguard_private_key: ""
+vpn_countries: "Netherlands"
+seedbox_dir: "/home/${USERNAME}/seedbox"
+seedbox_config_dir: "/opt/seedbox_configs"
+seedbox_downloads_dir: "/home/${USERNAME}/seedbox/downloads"
+qbittorrent_port: 8080

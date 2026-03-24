@@ -1,0 +1,63 @@
+# Managed by Ansible (docker-host role)
+# Proper runc AppArmor profile for Docker hosts
+# Replaces the default Ubuntu profile which only has userns permission
+# and blocks the dynamic linker (OPS-14)
+#
+# Docker/containerd apply their own AppArmor confinement to containers
+# (docker-default profile). This profile only confines the runc binary
+# itself on the host.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile runc /usr/sbin/runc flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  include <abstractions/consoles>
+  include <abstractions/nameservice>
+
+  # Container runtime capabilities
+  capability,
+
+  # Networking (container setup)
+  network,
+
+  # Filesystem operations for container lifecycle
+  mount,
+  umount,
+  pivot_root,
+
+  # Signal and process management
+  signal,
+  ptrace peer=runc,
+  unix,
+
+  # User namespace support (CIS hardening)
+  userns,
+
+  # Allow runc to read/execute itself and its libraries
+  /usr/sbin/runc rmix,
+  /usr/bin/runc rmix,
+
+  # Container runtime paths
+  /run/containerd/** rwlk,
+  /run/docker/** rwlk,
+  /var/run/docker/** rwlk,
+  /var/lib/docker/** rwlk,
+  /var/lib/containerd/** rwlk,
+
+  # Process and system information
+  @{PROC}/** rw,
+  @{sys}/** r,
+
+  # Device access for containers
+  /dev/** rw,
+  /dev/pts/** rw,
+
+  # Temp files
+  /tmp/** rwlk,
+
+  # Allow reading container bundles and rootfs
+  /** rwlkix,
+
+  include if exists <local/runc>
+}

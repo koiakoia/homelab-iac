@@ -1,0 +1,96 @@
+---
+- name: Set permissions on sshd_config (CIS 5.1.1)
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Ensure sshd_config.d directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Ensure sshd_config includes config.d directory
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?\s*Include\s+/etc/ssh/sshd_config\.d/'
+    line: "Include /etc/ssh/sshd_config.d/*.conf"
+    insertbefore: BOF
+    state: present
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Create auth_principals directory
+  ansible.builtin.file:
+    path: /etc/ssh/auth_principals
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Deploy per-user authorized principals files
+  ansible.builtin.copy:
+    content: "{{ item.value | join('\n') }}\n"
+    dest: "/etc/ssh/auth_principals/{{ item.key }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ sshd_auth_principals | dict2items }}"
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Deploy SSH hardening drop-in config
+  ansible.builtin.template:
+    src: sshd_hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/50-sentinel-hardening.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Set PermitRootLogin in main sshd_config (for SCA)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^\s*#?\s*PermitRootLogin'
+    line: "PermitRootLogin {{ sshd_permit_root_login }}"
+    state: present
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - hardening
+
+- name: Validate full sshd configuration
+  ansible.builtin.command:
+    cmd: sshd -t
+  changed_when: false
+  tags:
+    - common
+    - ssh
+    - hardening

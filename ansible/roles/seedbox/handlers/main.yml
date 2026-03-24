@@ -1,0 +1,6 @@
+---
+- name: Restart seedbox
+  ansible.builtin.command:
+    cmd: docker compose restart
+    chdir: /opt/seedbox
+  tags: [seedbox]

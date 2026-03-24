@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER={{ vpn_provider }}
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY={{ wireguard_private_key }}
+      - SERVER_COUNTRIES={{ vpn_countries }}
+    ports:
+      - "{{ qbittorrent_port }}:{{ qbittorrent_port }}"
+    restart: always
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - WEBUI_PORT={{ qbittorrent_port }}
+    volumes:
+      - {{ seedbox_config_dir }}:/config
+      - {{ seedbox_downloads_dir }}:/downloads
+    restart: always
+    depends_on:
+      - gluetun

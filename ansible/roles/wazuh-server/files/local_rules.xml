@@ -1,0 +1,212 @@
+<!-- Local rules -->
+<!-- Copyright (C) 2015, Wazuh Inc. -->
+
+<group name="local,dpkg,">
+  <rule id="100002" level="3">
+    <if_sid>2904</if_sid>
+    <description>Dpkg: Package half-configured (routine apt operation, suppressed)</description>
+    <group>dpkg,</group>
+  </rule>
+  <rule id="100003" level="3">
+    <if_sid>2902</if_sid>
+    <description>Dpkg: New package installed (routine system maintenance, suppressed)</description>
+    <group>dpkg,</group>
+  </rule>
+</group>
+
+<group name="local,rootcheck,">
+  <rule id="100004" level="3">
+    <if_sid>510</if_sid>
+    <field name="agent.name">^pve$|^proxmox-node-3$|^proxmox-node-2$</field>
+    <description>Rootcheck: FALSE POSITIVE on Proxmox host - Generic signature matches /dev/null in clean passwd/chfn/chsh binaries. Verified via dpkg --verify.</description>
+    <group>rootcheck,</group>
+  </rule>
+</group>
+
+<group name="local,network,">
+  <rule id="100005" level="3">
+    <if_sid>533</if_sid>
+    <field name="agent.name">^iac-control$</field>
+    <description>Network: Port change on iac-control - expected (socat/service management)</description>
+    <group>network,</group>
+  </rule>
+</group>
+
+<group name="local,vault,authentication_failed,">
+  <rule id="100006" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="type">response</field>
+    <match>permission denied|invalid credentials|missing client token</match>
+    <description>Vault: Authentication failure detected - potential unauthorized access attempt</description>
+    <group>authentication_failed,vault,</group>
+  </rule>
+</group>
+
+<group name="local,vulnerability-detection,">
+  <!-- CRITICAL CVE: level 14 (above built-in 13) ensures Discord notification -->
+  <rule id="100700" level="14">
+    <if_sid>23506</if_sid>
+    <description>SENTINEL: CRITICAL CVE detected - $(vulnerability.cve) on $(agent.name)</description>
+    <group>vulnerability-detection,critical_cve,</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- HIGH CVE: level 11 (above built-in 10) ensures Discord notification -->
+  <rule id="100701" level="11">
+    <if_sid>23505</if_sid>
+    <description>SENTINEL: HIGH CVE detected - $(vulnerability.cve) on $(agent.name)</description>
+    <group>vulnerability-detection,high_cve,</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- CVE resolved: informational, matches "resolved" text from base rule -->
+  <rule id="100702" level="3">
+    <if_sid>23501</if_sid>
+    <match>resolved</match>
+    <description>SENTINEL: CVE resolved on $(agent.name)</description>
+    <group>vulnerability-detection,cve_resolved,</group>
+  </rule>
+</group>
+
+<!-- Falco runtime security alerts (forwarded via falco-wazuh-forwarder) -->
+<!-- Rule IDs: 100800-100810 -->
+<!-- NIST Controls: SI-4 (System Monitoring), AU-2 (Audit Events) -->
+<group name="falco,">
+  <rule id="100800" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="source">falco</field>
+    <description>Falco: $(rule) in $(output_fields.k8s.ns.name)/$(output_fields.k8s.pod.name)</description>
+    <group>falco,</group>
+  </rule>
+
+  <rule id="100801" level="10">
+    <if_sid>100800</if_sid>
+    <field name="priority">Emergency|Alert|Critical</field>
+    <description>Falco CRITICAL: $(rule) in $(output_fields.k8s.ns.name)/$(output_fields.k8s.pod.name)</description>
+    <group>falco,critical,</group>
+    <mitre>
+      <id>T1059</id>
+    </mitre>
+  </rule>
+
+  <rule id="100802" level="7">
+    <if_sid>100800</if_sid>
+    <field name="priority">Error</field>
+    <description>Falco ERROR: $(rule) in $(output_fields.k8s.ns.name)/$(output_fields.k8s.pod.name)</description>
+    <group>falco,error,</group>
+  </rule>
+
+  <rule id="100803" level="5">
+    <if_sid>100800</if_sid>
+    <field name="priority">Warning</field>
+    <description>Falco WARNING: $(rule) in $(output_fields.k8s.ns.name)/$(output_fields.k8s.pod.name)</description>
+    <group>falco,warning,</group>
+  </rule>
+
+  <rule id="100804" level="12">
+    <if_sid>100800</if_sid>
+    <field name="rule">Terminal shell in container</field>
+    <description>Falco: Interactive shell opened in container $(output_fields.k8s.pod.name)</description>
+    <group>falco,shell,</group>
+    <mitre>
+      <id>T1059.004</id>
+    </mitre>
+  </rule>
+
+  <rule id="100805" level="12">
+    <if_sid>100800</if_sid>
+    <field name="rule">Read sensitive file</field>
+    <description>Falco: Sensitive file access in container $(output_fields.k8s.pod.name)</description>
+    <group>falco,credential_access,</group>
+    <mitre>
+      <id>T1003</id>
+    </mitre>
+  </rule>
+
+  <rule id="100806" level="14">
+    <if_sid>100800</if_sid>
+    <field name="rule">Write below binary dir</field>
+    <description>Falco: Binary directory modification in $(output_fields.k8s.pod.name) - potential malware</description>
+    <group>falco,persistence,</group>
+    <mitre>
+      <id>T1554</id>
+    </mitre>
+  </rule>
+
+  <rule id="100807" level="14">
+    <if_sid>100800</if_sid>
+    <field name="rule">Launch Privileged Container</field>
+    <description>Falco: Privileged container launched in $(output_fields.k8s.ns.name)</description>
+    <group>falco,privilege_escalation,</group>
+    <mitre>
+      <id>T1610</id>
+    </mitre>
+  </rule>
+
+  <rule id="100808" level="10">
+    <if_sid>100800</if_sid>
+    <field name="rule">Contact K8S API Server From Container</field>
+    <description>Falco: K8s API access from container $(output_fields.k8s.pod.name)</description>
+    <group>falco,discovery,</group>
+    <mitre>
+      <id>T1613</id>
+    </mitre>
+  </rule>
+
+  <rule id="100809" level="12">
+    <if_sid>100800</if_sid>
+    <field name="rule">Netcat Remote Code Execution</field>
+    <description>Falco: Reverse shell attempt in $(output_fields.k8s.pod.name)</description>
+    <group>falco,command_and_control,</group>
+    <mitre>
+      <id>T1059</id>
+    </mitre>
+  </rule>
+
+  <rule id="100810" level="3">
+    <if_sid>100800</if_sid>
+    <field name="priority">Notice|Informational|Debug</field>
+    <description>Falco INFO: $(rule)</description>
+    <group>falco,informational,</group>
+  </rule>
+</group>
+
+<!-- Terraform/OpenTofu drift detection alerts -->
+<!-- Rule IDs: 100430-100435 -->
+<!-- NIST Controls: CM-3 (Configuration Change Control), CM-6 (Configuration Settings) -->
+<group name="terraform,drift,">
+  <rule id="100430" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="event">TOFU_DRIFT_CHECK_COMPLETE</field>
+    <description>Terraform drift check completed - no drift detected</description>
+    <group>terraform,drift,</group>
+  </rule>
+
+  <rule id="100431" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="event">TOFU_DRIFT_DETECTED</field>
+    <description>Terraform drift detected: $(changes) resource(s) changed</description>
+    <group>terraform,drift,</group>
+    <mitre>
+      <id>T1578</id>
+    </mitre>
+  </rule>
+
+  <rule id="100432" level="7">
+    <decoded_as>json</decoded_as>
+    <field name="event">TOFU_DRIFT_CHECK_FAILED</field>
+    <description>Terraform drift check failed: $(error)</description>
+    <group>terraform,drift,error,</group>
+  </rule>
+
+  <rule id="100433" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="event">TOFU_DRIFT_RESOURCES</field>
+    <description>Terraform drift details: $(resources)</description>
+    <group>terraform,drift,</group>
+  </rule>
+</group>

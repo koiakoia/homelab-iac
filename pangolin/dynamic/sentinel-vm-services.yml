@@ -1,0 +1,176 @@
+http:
+  serversTransports:
+    transport-proxmox:
+      insecureSkipVerify: true
+
+  routers:
+    router-gitlab-208:
+      rule: "Host(`gitlab.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-gitlab-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-vault-208:
+      rule: "Host(`vault.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-vault-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-minio-208:
+      rule: "Host(`minio.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-minio-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-pve-208:
+      rule: "Host(`pve.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-pve-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-pve2-208:
+      rule: "Host(`pve2.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-pve2-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-proxmox-node-3-208:
+      rule: "Host(`proxmox-node-3.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-proxmox-node-3-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-wazuh-208:
+      rule: "Host(`wazuh.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-wazuh-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-wazuh-api-208:
+      rule: "Host(`wazuh-api.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-wazuh-api-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-seedbox-208:
+      rule: "Host(`seedbox.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-seedbox-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-forgejo-208:
+      rule: "Host(`forgejo.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-forgejo-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-crowdsec-api-208:
+      rule: "Host(`crowdsec-api.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-crowdsec-api-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-wazuh-indexer-208:
+      rule: "Host(`wazuh-indexer.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-wazuh-indexer-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+  services:
+    service-gitlab-208:
+      loadBalancer:
+        servers:
+          - url: "http://${GITLAB_IP}:80"
+    service-vault-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${VAULT_IP}:8200"
+    service-minio-208:
+      loadBalancer:
+        servers:
+          - url: "http://${MINIO_PRIMARY_IP}:9001"
+    service-pve-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${PROXMOX_NODE1_IP}:8006"
+    service-pve2-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${PROXMOX_NODE2_IP}:8006"
+    service-proxmox-node-3-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${PROXMOX_NODE3_IP}:8006"
+    service-wazuh-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${WAZUH_IP}:443"
+    service-wazuh-api-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${WAZUH_IP}:55000"
+    service-seedbox-208:
+      loadBalancer:
+        servers:
+          - url: "http://${SEEDBOX_IP}:8080"
+    service-crowdsec-api-208:
+      loadBalancer:
+        servers:
+          - url: "http://172.18.0.1:8080"
+    service-forgejo-208:
+      loadBalancer:
+        servers:
+          - url: "http://${FORGEJO_IP}:3000"
+    service-wazuh-indexer-208:
+      loadBalancer:
+        serversTransport: "transport-proxmox"
+        servers:
+          - url: "https://${WAZUH_IP}:9200"

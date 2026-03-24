@@ -1,0 +1,7 @@
+---
+- name: Configure config-server for HA resilience
+  hosts: config-server
+  become: true
+  roles:
+    - common
+    - config-server

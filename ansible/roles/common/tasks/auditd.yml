@@ -1,0 +1,154 @@
+---
+- name: Install auditd packages
+  ansible.builtin.apt:
+    name:
+      - auditd
+      - audispd-plugins
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Remove invalid backlog_limit from auditd.conf (set via rules instead)
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^backlog_limit'
+    state: absent
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Restart auditd
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Configure auditd max_log_file_action
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^max_log_file_action'
+    line: "max_log_file_action = keep_logs"
+    state: present
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Configure auditd space_left_action
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^space_left_action'
+    line: "space_left_action = email"
+    state: present
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Configure auditd admin_space_left_action (CIS 5.2.2.2)
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^admin_space_left_action'
+    line: "admin_space_left_action = halt"
+    state: present
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Configure auditd disk_full_action (CIS 5.2.2.3)
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^disk_full_action'
+    line: "disk_full_action = HALT"
+    state: present
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Configure auditd disk_error_action (CIS 5.2.2.4)
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^disk_error_action'
+    line: "disk_error_action = HALT"
+    state: present
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Set audit tool permissions (CIS 5.2.3.21)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "0750"
+  loop:
+    - /sbin/auditctl
+    - /sbin/aureport
+    - /sbin/ausearch
+    - /sbin/autrace
+    - /sbin/auditd
+    - /sbin/augenrules
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  failed_when: false
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Deploy audit rules
+  ansible.builtin.template:
+    src: audit.rules.j2
+    dest: /etc/audit/rules.d/sentinel.rules
+    owner: root
+    group: root
+    mode: "0640"
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  notify: Load audit rules
+  tags:
+    - common
+    - auditd
+    - hardening
+
+- name: Enable and start auditd
+  ansible.builtin.service:
+    name: auditd
+    enabled: true
+    state: started
+  when:
+    - auditd_enabled
+    - ansible_virtualization_type != 'lxc'
+  tags:
+    - common
+    - auditd
+    - hardening

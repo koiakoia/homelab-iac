@@ -1,0 +1,9 @@
+---
+- name: Configure MinIO bootstrap server
+  hosts: minio
+  become: true
+  roles:
+    - role: common
+      tags: [common]
+    - role: minio-server
+      tags: [minio]

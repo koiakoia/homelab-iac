@@ -1,0 +1,6 @@
+---
+collections:
+  - name: netbox.netbox
+    version: ">=3.16.0"
+  - name: ansible.utils
+    version: ">=2.12.0"

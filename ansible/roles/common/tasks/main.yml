@@ -1,0 +1,181 @@
+---
+- name: Install qemu-guest-agent
+  ansible.builtin.apt:
+    name: qemu-guest-agent
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - common
+    - qemu
+
+- name: Deploy SSH banner
+  ansible.builtin.template:
+    src: issue.net.j2
+    dest: /etc/issue.net
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - common
+    - ssh
+    - banner
+
+- name: Configure sshd Banner directive
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Banner\s'
+    line: "Banner /etc/issue.net"
+    state: present
+    validate: "sshd -t -f %s"
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+
+- name: Configure sshd TrustedUserCAKeys directive
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?TrustedUserCAKeys\s'
+    line: "TrustedUserCAKeys /etc/ssh/trusted-ca.pem"
+    state: present
+    validate: "sshd -t -f %s"
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - vault-ssh
+
+- name: Deploy Vault SSH CA public key
+  ansible.builtin.template:
+    src: trusted-ca.pem.j2
+    dest: /etc/ssh/trusted-ca.pem
+    owner: root
+    group: root
+    mode: "0644"
+  when: vault_ssh_ca_public_key | length > 0
+  notify: Restart sshd
+  tags:
+    - common
+    - ssh
+    - vault-ssh
+
+- name: Deploy session timeout script
+  ansible.builtin.template:
+    src: session-timeout.sh.j2
+    dest: /etc/profile.d/session-timeout.sh
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - common
+    - hardening
+    - session-timeout
+
+- name: Remove conflicting logrotate config (duplicates distro rsyslog config)
+  ansible.builtin.file:
+    path: /etc/logrotate.d/sentinel-logs
+    state: absent
+  tags:
+    - common
+    - logging
+
+- name: Install AIDE
+  ansible.builtin.apt:
+    name: aide
+    state: present
+  when: aide_enabled
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Deploy AIDE configuration
+  ansible.builtin.template:
+    src: aide.conf.j2
+    dest: /etc/aide/aide.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: aide_enabled
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: /var/lib/aide/aide.db
+  register: aide_db
+  when: aide_enabled
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Initialize AIDE database
+  ansible.builtin.command:
+    cmd: aideinit
+  when:
+    - aide_enabled
+    - not aide_db.stat.exists
+  changed_when: true
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Copy AIDE baseline database
+  ansible.builtin.command:
+    cmd: cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+    creates: /var/lib/aide/aide.db
+  when:
+    - aide_enabled
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Deploy AIDE daily cron
+  ansible.builtin.template:
+    src: aide-cron.j2
+    dest: /etc/cron.d/aide-check
+    owner: root
+    group: root
+    mode: "0644"
+  when: aide_enabled
+  tags:
+    - common
+    - aide
+    - fim
+
+- name: Include time synchronization tasks
+  ansible.builtin.include_tasks: time-sync.yml
+  tags:
+    - common
+    - ntp
+    - time
+
+- name: Include SSH hardening tasks
+  ansible.builtin.import_tasks: sshd-hardening.yml
+
+- name: Include PAM hardening tasks
+  ansible.builtin.import_tasks: pam-hardening.yml
+
+- name: Include OS hardening tasks
+  ansible.builtin.import_tasks: os-hardening.yml
+
+- name: Include auditd tasks
+  ansible.builtin.import_tasks: auditd.yml
+
+- name: Include firewall tasks
+  ansible.builtin.import_tasks: firewall.yml
+
+- name: Include wazuh-agent tasks
+  ansible.builtin.include_role:
+    name: wazuh-agent
+  when: "'wazuh' not in group_names"
+  tags:
+    - common
+    - wazuh
+    - siem

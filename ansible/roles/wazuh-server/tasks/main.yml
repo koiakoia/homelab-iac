@@ -1,0 +1,78 @@
+---
+- name: Install dependencies
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - apt-transport-https
+      - curl
+    state: present
+    update_cache: true
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Wazuh GPG key
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+    dest: /etc/apt/keyrings/wazuh.gpg
+    mode: '0644'
+
+- name: Add Wazuh repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main"
+    state: present
+
+- name: Install Wazuh manager
+  ansible.builtin.apt:
+    name: wazuh-manager
+    state: present
+
+- name: Install Wazuh indexer
+  ansible.builtin.apt:
+    name: wazuh-indexer
+    state: present
+
+- name: Install Wazuh dashboard
+  ansible.builtin.apt:
+    name: wazuh-dashboard
+    state: present
+
+- name: Configure Wazuh manager (ossec.conf)
+  ansible.builtin.template:
+    src: ossec-server.conf.j2
+    dest: "{{ wazuh_server_config_path }}"
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Restart wazuh-manager
+
+- name: Deploy local_rules.xml (custom Sentinel noise suppression rules)
+  ansible.builtin.copy:
+    src: local_rules.xml
+    dest: /var/ossec/etc/rules/local_rules.xml
+    owner: wazuh
+    group: wazuh
+    mode: "0660"
+  notify: Restart wazuh-manager
+
+- name: Deploy custom-matrix integration script
+  ansible.builtin.copy:
+    src: custom-matrix
+    dest: /var/ossec/integrations/custom-matrix
+    owner: root
+    group: wazuh
+    mode: "0750"
+  notify: Restart wazuh-manager
+
+- name: Ensure services are started and enabled
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - wazuh-indexer
+    - wazuh-manager
+    - wazuh-dashboard

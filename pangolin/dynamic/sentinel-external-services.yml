@@ -1,0 +1,105 @@
+http:
+  routers:
+    router-oauth2-proxy:
+      rule: "Host(`oauth2.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-oauth2-proxy"
+      tls:
+        certResolver: "cloudflare"
+        domains:
+          - main: "${DOMAIN}"
+            sans:
+              - "*.${DOMAIN}"
+          - main: "${INTERNAL_DOMAIN}"
+            sans:
+              - "*.${INTERNAL_DOMAIN}"
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-auth-ext-block-admin:
+      rule: "Host(`auth.${DOMAIN}`) && PathPrefix(`/admin`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 200
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "oauth2-forward-auth@file"
+        - "security-headers-keycloak@file"
+    router-auth-ext:
+      rule: "Host(`auth.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 100
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers-keycloak@file"
+    router-gitlab-ext-bypass:
+      rule: "Host(`gitlab.${DOMAIN}`) && (PathPrefix(`/api/`) || PathPrefix(`/-/health`) || PathPrefix(`/-/readiness`) || PathPrefix(`/-/liveness`) || PathPrefix(`/users/auth/`) || PathPrefix(`/oauth/`) || PathPrefix(`/jwt/auth`) || Path(`/robots.txt`))"
+      entryPoints:
+        - "websecure"
+      service: "service-gitlab-208"
+      priority: 200
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-gitlab-ext:
+      rule: "Host(`gitlab.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-gitlab-208"
+      priority: 100
+      tls:
+        certResolver: "cloudflare"
+        domains:
+          - main: "${DOMAIN}"
+            sans:
+              - "*.${DOMAIN}"
+          - main: "${INTERNAL_DOMAIN}"
+            sans:
+              - "*.${INTERNAL_DOMAIN}"
+      middlewares:
+        - "rate-limit@file"
+        - "oauth2-forward-auth@file"
+        - "security-headers@file"
+    router-matrix-ext-bypass:
+      rule: "Host(`matrix.${DOMAIN}`) && (PathPrefix(`/_matrix/`) || PathPrefix(`/_synapse/client/`) || PathPrefix(`/.well-known/`))"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 200
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-matrix-ext:
+      rule: "Host(`matrix.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 100
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    router-www-ext:
+      rule: "Host(`www.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers-public@file"
+
+  services:
+    service-oauth2-proxy:
+      loadBalancer:
+        servers:
+          - url: "http://oauth2-proxy:4180"

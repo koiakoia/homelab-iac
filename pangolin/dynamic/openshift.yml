@@ -1,0 +1,67 @@
+http:
+  serversTransports:
+    transport-api:
+      insecureSkipVerify: true
+    transport-console:
+      insecureSkipVerify: true
+      serverName: "console-openshift-console.apps.${OKD_CLUSTER}.${DOMAIN}"
+    transport-oauth:
+      insecureSkipVerify: true
+      serverName: "oauth-openshift.apps.${OKD_CLUSTER}.${DOMAIN}"
+
+  routers:
+    router-api:
+      rule: "Host(`api.${OKD_CLUSTER}.${DOMAIN}`) || Host(`api-int.${OKD_CLUSTER}.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-api"
+      tls:
+        certResolver: "cloudflare"
+    router-console:
+      rule: "Host(`console-openshift-console.apps.${OKD_CLUSTER}.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-console"
+      tls:
+        certResolver: "cloudflare"
+    router-oauth:
+      rule: "Host(`oauth-openshift.apps.${OKD_CLUSTER}.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-oauth"
+      tls:
+        certResolver: "cloudflare"
+
+  services:
+    service-api:
+      loadBalancer:
+        serversTransport: "transport-api"
+        servers:
+          - url: "https://${IAC_CONTROL_IP}:6443"
+    service-console:
+      loadBalancer:
+        serversTransport: "transport-console"
+        servers:
+          - url: "https://${IAC_CONTROL_IP}:443"
+    service-oauth:
+      loadBalancer:
+        serversTransport: "transport-oauth"
+        servers:
+          - url: "https://${IAC_CONTROL_IP}:443"
+
+tcp:
+  routers:
+    router-apps-wildcard:
+      rule: "HostSNIRegexp(`{subdomain:.+}.apps.${OKD_CLUSTER}.${DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-apps-tcp"
+      tls:
+        passthrough: true
+      priority: 1
+
+  services:
+    service-apps-tcp:
+      loadBalancer:
+        servers:
+          - address: "${IAC_CONTROL_IP}:443"

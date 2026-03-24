@@ -1,0 +1,58 @@
+---
+# Existing
+vault_ssh_ca_public_key: ""
+session_timeout: 900
+log_retention_days: 14
+aide_enabled: true
+is_lxc: "{{ ansible_virtualization_type == 'lxc' }}"
+
+# SSH hardening (Task 1)
+sshd_permit_root_login: "no"
+sshd_max_auth_tries: 4
+sshd_client_alive_interval: 300
+sshd_client_alive_count_max: 3
+sshd_max_sessions: 10
+
+# PAM hardening (Task 2)
+pam_faillock_deny: 5
+pam_faillock_unlock_time: 900
+pam_pwhistory_remember: 24
+password_max_days: 365
+password_min_days: 1
+password_warn_age: 7
+password_min_length: 14
+
+# OS hardening (Task 3)
+sysctl_hardening_enabled: true
+remove_insecure_packages: true
+
+# Auditd (Task 4)
+auditd_enabled: true
+audit_backlog_limit: 8192
+
+# Firewall (Task 5)
+firewall_enabled: true
+firewall_allowed_ports:
+  - 22
+
+# NTP time synchronization
+ntp_servers:
+  - pool.ntp.org
+
+# Remote syslog forwarding
+rsyslog_remote_enabled: true
+rsyslog_remote_server: "${WAZUH_IP}"
+rsyslog_remote_port: 514
+
+# SSH access control
+sshd_allow_groups: "sudo"
+
+# AuthorizedPrincipalsFile — map Vault SSH CA principals to local users
+# Each key is a local username, value is a list of allowed principals
+sshd_auth_principals:
+  ubuntu:
+    - ubuntu
+  root:
+    - root
+  ${USERNAME}:
+    - ${USERNAME}

@@ -1,0 +1,50 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# OKD etcd backup script - runs daily via systemd timer
+# Backs up etcd snapshot from master node to MinIO
+
+set -euo pipefail
+
+MASTER_NODE="{{ etcd_backup_master }}"
+MASTER_USER="{{ etcd_backup_user }}"
+SSH_KEY="{{ etcd_backup_ssh_key }}"
+MINIO_BUCKET="{{ etcd_backup_minio_bucket }}"
+RETENTION_DAYS={{ etcd_backup_retention_days }}
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP_NAME="etcd-snapshot-${TIMESTAMP}.db"
+LOCAL_DIR="/tmp/etcd-backups"
+
+mkdir -p "${LOCAL_DIR}"
+
+echo "[$(date)] Starting etcd backup from ${MASTER_NODE}..."
+
+# Take etcd snapshot on master node
+ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "${MASTER_USER}@${MASTER_NODE}" \
+    "sudo /usr/local/bin/cluster-backup.sh /tmp/etcd-backup-${TIMESTAMP}" < /dev/null 2>&1
+
+# Fix permissions so core user can SCP the snapshot
+ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "${MASTER_USER}@${MASTER_NODE}" \
+    "sudo chmod 644 /tmp/etcd-backup-${TIMESTAMP}/snapshot_*.db" < /dev/null 2>&1
+
+# Copy snapshot to local
+scp -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
+    "${MASTER_USER}@${MASTER_NODE}:/tmp/etcd-backup-${TIMESTAMP}/snapshot_*.db" \
+    "${LOCAL_DIR}/${BACKUP_NAME}" 2>&1
+
+# Upload to MinIO
+mc cp "${LOCAL_DIR}/${BACKUP_NAME}" "minio/${MINIO_BUCKET}/${BACKUP_NAME}"
+
+echo "[$(date)] Uploaded ${BACKUP_NAME} to MinIO ${MINIO_BUCKET}"
+
+# Cleanup local
+rm -f "${LOCAL_DIR}/${BACKUP_NAME}"
+
+# Cleanup remote
+ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no "${MASTER_USER}@${MASTER_NODE}" \
+    "sudo rm -rf /tmp/etcd-backup-${TIMESTAMP}" 2>&1
+
+# Prune old backups in MinIO (retention policy)
+mc find "minio/${MINIO_BUCKET}" --older-than "${RETENTION_DAYS}d" --exec "mc rm {}" 2>/dev/null || true
+
+echo "[$(date)] etcd backup completed successfully"

@@ -1,0 +1,19 @@
+---
+wazuh_manager_version: "4.x"
+wazuh_indexer_hosts: ["127.0.0.1"]
+wazuh_dashboard_hosts: ["127.0.0.1"]
+wazuh_server_config_path: "/var/ossec/etc/ossec.conf"
+
+# Vulnerability detection (Wazuh 4.8+ native module)
+wazuh_vuln_detection_enabled: true
+wazuh_vuln_feed_interval: "60m"
+
+# Matrix alert integration (via Sentinel Matrix Bot on iac-control)
+wazuh_matrix_integration_enabled: true
+wazuh_matrix_hook_url: "http://${IAC_CONTROL_IP}:9095/wazuh"
+wazuh_matrix_alert_level: "10"
+
+# Indexer SSL certificate paths
+wazuh_indexer_ssl_ca: "/etc/filebeat/certs/root-ca.pem"
+wazuh_indexer_ssl_cert: "/etc/filebeat/certs/wazuh-server.pem"
+wazuh_indexer_ssl_key: "/etc/filebeat/certs/wazuh-server-key.pem"

@@ -1,0 +1,68 @@
+APP_NAME = Forgejo: Project Sentinel
+RUN_MODE = prod
+RUN_USER = git
+
+[server]
+DOMAIN           = {{ forgejo_domain }}
+ROOT_URL         = {{ forgejo_root_url }}/
+HTTP_PORT        = 3000
+SSH_DOMAIN       = {{ forgejo_domain }}
+SSH_PORT         = 22
+SSH_LISTEN_PORT  = 22
+LFS_START_SERVER = true
+OFFLINE_MODE     = false
+
+[database]
+DB_TYPE  = postgres
+HOST     = postgres:5432
+NAME     = {{ forgejo_db_name }}
+USER     = {{ forgejo_db_user }}
+PASSWD   = {{ forgejo_db_password }}
+SSL_MODE = disable
+
+[service]
+DISABLE_REGISTRATION              = true
+REQUIRE_SIGNIN_VIEW               = true
+ENABLE_NOTIFY_MAIL                = false
+ALLOW_ONLY_EXTERNAL_REGISTRATION  = true
+
+[openid]
+ENABLE_OPENID_SIGNIN = false
+ENABLE_OPENID_SIGNUP = false
+
+{% if forgejo_oidc_enabled %}
+[oauth2]
+ENABLED = true
+
+[oauth2_client]
+OPENID_CONNECT_SCOPES = {{ forgejo_oidc_scopes }}
+ENABLE_AUTO_REGISTRATION = true
+USERNAME = nickname
+{% endif %}
+
+[log]
+MODE      = console
+LEVEL     = info
+ROOT_PATH = /data/gitea/log
+
+[security]
+INSTALL_LOCK   = true
+REVERSE_PROXY_LIMIT = 1
+REVERSE_PROXY_TRUSTED_PROXIES = ${PROXY_IP}/32
+
+[repository]
+DEFAULT_BRANCH = main
+
+[migrations]
+ALLOW_LOCAL_NETWORKS = true
+ALLOWED_DOMAINS = ${GITLAB_IP},gitlab.${DOMAIN}
+
+[api]
+ENABLE_SWAGGER = false
+
+[other]
+SHOW_FOOTER_VERSION = false
+
+[actions]
+ENABLED = true
+DEFAULT_ACTIONS_URL = https://code.forgejo.org

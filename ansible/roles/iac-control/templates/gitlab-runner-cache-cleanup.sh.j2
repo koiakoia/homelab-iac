@@ -1,0 +1,15 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Clean GitLab Runner build caches older than 7 days
+set -euo pipefail
+RUNNER_HOME="/home/gitlab-runner"
+for dir in .cache .yarn .npm .ansible/tmp; do
+  if [ -d "$RUNNER_HOME/$dir" ]; then
+    find "$RUNNER_HOME/$dir" -type f -atime +7 -delete 2>/dev/null || true
+    find "$RUNNER_HOME/$dir" -type d -empty -delete 2>/dev/null || true
+  fi
+done
+# Clean old build directories (builds/ contains pipeline working directories)
+if [ -d "$RUNNER_HOME/builds" ]; then
+  find "$RUNNER_HOME/builds" -maxdepth 2 -type d -mtime +3 -exec rm -rf {} + 2>/dev/null || true
+fi

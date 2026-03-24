@@ -1,0 +1,62 @@
+---
+name: Lint
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  yamllint:
+    runs-on: iac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run yamllint
+        run: |
+          echo "Running yamllint on all YAML files..."
+          yamllint -c .yamllint.yml -f parsable . | tee yamllint-report.txt
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: yamllint-report
+          path: yamllint-report.txt
+
+  ansible-lint:
+    runs-on: iac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ansible-lint
+        run: |
+          echo "Running ansible-lint on playbooks..."
+          cd infrastructure
+          ansible-lint -f sarif --nocolor . > ../ansible-lint-report.json 2>../ansible-lint-stderr.txt
+          LINT_RC=$?
+          cd ..
+          if [ -s ansible-lint-stderr.txt ]; then cat ansible-lint-stderr.txt; fi
+          exit $LINT_RC
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ansible-lint-report
+          path: ansible-lint-report.json
+
+  tflint:
+    runs-on: iac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tflint
+        run: |
+          echo "Running tflint on Terraform configs..."
+          for dir in infrastructure/bootstrap infrastructure/managed; do
+            if [ -d "$dir" ]; then
+              echo "Linting $dir..."
+              cd "$dir"
+              tflint --init 2>/dev/null
+              tflint --format json > "../../tflint-$(basename $dir)-report.json" 2>&1
+              cd ../..
+            fi
+          done
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: tflint-reports
+          path: tflint-*-report.json

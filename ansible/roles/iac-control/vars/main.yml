@@ -1,0 +1,136 @@
+---
+# Variables for iac-control configuration
+# Combines original OKD infrastructure vars with new service vars
+
+# Required packages (apt)
+required_packages:
+  - haproxy
+  - squid-openssl
+  - squid-common
+  - dnsmasq
+  - dnsmasq-base
+  - iptables
+  - iptables-persistent
+  - netfilter-persistent
+  - docker.io
+  - docker-compose-v2
+  - nginx
+  - keepalived
+  - socat
+  - jq
+  - git
+  - vim
+  - curl
+  - wget
+  - qemu-guest-agent
+
+# GitLab Runner (requires repo setup before install)
+gitlab_runner_package: gitlab-runner
+
+# Binary tools installed via script/binary (not apt)
+# These are checked with `which` and skipped if already present.
+# Version pinning could be added later for reproducibility.
+binary_tools:
+  - name: trivy
+    version: "0.69.1"
+  - name: tflint
+    version: "0.61.0"
+  - name: gitleaks
+    version: "8.30.0"
+  - name: helm
+  - name: oc
+  - name: kubectl
+  - name: mc
+  - name: vault
+
+# OKD Cluster nodes (used by HAProxy, dnsmasq, iptables templates)
+okd_bootstrap_node:
+  mac: "aa:bb:cc:dd:ee:ff"
+  ip: "${OKD_BOOTSTRAP_IP}"
+  hostname: "bootstrap"
+
+okd_master_nodes:
+  - name: master-1
+    mac: "${MAC_ADDRESS}"
+    ip: "${OKD_MASTER1_IP}"
+  - name: master-2
+    mac: "${MAC_ADDRESS}"
+    ip: "${OKD_MASTER2_IP}"
+  - name: master-3
+    mac: "${MAC_ADDRESS}"
+    ip: "${OKD_MASTER3_IP}"
+
+# HAProxy backend ports
+haproxy_api_port: 6443
+haproxy_machine_config_port: 22623
+haproxy_http_port: 80
+haproxy_https_port: 443
+
+# Squid egress allowlist domains
+squid_allowed_domains:
+  - .quay.io
+  - .docker.io
+  - .ghcr.io
+  - .lscr.io
+  - .githubusercontent.com
+  - .svc.ci.openshift.org
+  - .k8s.io
+  - .cloudfront.net
+  - .amazonaws.com
+  - .openshift.com
+  - .okd.io
+  - .pangolin.net
+  - .digicert.com
+  - .letsencrypt.org
+  - .globalsign.com
+  - .ubuntu.com
+  - .debian.org
+  - .pool.ntp.org
+  - .github.com
+  - .redhat.io
+  - .akamaized.net
+  - .fastly.net
+  - "${MINIO_PRIMARY_IP}"
+  - "${GITLAB_IP}"
+
+# DNS upstream servers
+dns_upstream_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+
+# Infrastructure service IPs
+nfs_server: ${VAULT_SECONDARY_IP}
+minio_server: ${MINIO_PRIMARY_IP}
+gitlab_server: ${GITLAB_IP}
+
+# Firewall allowed IPs for HAProxy access
+haproxy_allowed_sources:
+  - ${PROXY_IP}/32
+  - ${VAULT_IP}/32  # Vault server - ESO needs K8s API access
+
+# --- New service variables ---
+
+# etcd backup settings
+etcd_backup_master: "${OKD_MASTER1_IP}"
+etcd_backup_user: "core"
+etcd_backup_ssh_key: "/home/ubuntu/.ssh/id_sentinel"
+etcd_backup_minio_bucket: "etcd-backups"
+etcd_backup_retention_days: 7
+
+# Sentinel Matrix Bot (replaces grafana-alert-receiver)
+matrix_bot_port: 9095
+matrix_bot_log: "/var/log/sentinel-matrix-bot.log"
+
+# qBittorrent socat proxy
+qbit_proxy_listen_port: 18080
+qbit_proxy_target: "${SEEDBOX_IP}:8080"
+
+# GitLab Runner
+gitlab_runner_url: "http://${GITLAB_IP}"
+gitlab_runner_token: ""
+gitlab_runner_tags: "iac,sentinel-iac"
+
+# Nginx PXE directories
+nginx_pxe_dirs:
+  - /var/www/html/ignition
+  - /var/www/html/scos

@@ -1,0 +1,54 @@
+services:
+  forgejo:
+    image: {{ forgejo_image }}
+    container_name: forgejo
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__database__DB_TYPE=postgres
+      - FORGEJO__database__HOST=postgres:5432
+      - FORGEJO__database__NAME={{ forgejo_db_name }}
+      - FORGEJO__database__USER={{ forgejo_db_user }}
+      - FORGEJO__database__PASSWD={{ forgejo_db_password }}
+    volumes:
+      - {{ forgejo_data_dir }}:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "{{ forgejo_http_port }}:3000"
+      - "{{ forgejo_ssh_port }}:22"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
+  postgres:
+    image: {{ forgejo_postgres_image }}
+    container_name: forgejo-postgres
+    environment:
+      - POSTGRES_DB={{ forgejo_db_name }}
+      - POSTGRES_USER={{ forgejo_db_user }}
+      - POSTGRES_PASSWORD={{ forgejo_db_password }}
+    volumes:
+      - {{ forgejo_postgres_dir }}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ forgejo_db_user }} -d {{ forgejo_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+{% if forgejo_runner_token | default('') | length > 0 %}
+  runner:
+    image: {{ forgejo_runner_image }}
+    container_name: forgejo-runner
+    environment:
+      - FORGEJO_URL=http://forgejo:3000
+      - RUNNER_TOKEN={{ forgejo_runner_token }}
+      - RUNNER_NAME=local-runner
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - forgejo
+    restart: always
+{% endif %}

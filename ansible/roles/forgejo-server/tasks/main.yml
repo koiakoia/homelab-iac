@@ -1,0 +1,47 @@
+---
+- name: Create forgejo directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ forgejo_dir }}"
+    - "{{ forgejo_data_dir }}"
+    - "{{ forgejo_data_dir }}/gitea/conf"
+    - "{{ forgejo_postgres_dir }}"
+  tags: [forgejo]
+
+- name: Deploy forgejo docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ forgejo_dir }}/docker-compose.yml"
+    mode: "0640"
+  notify: Restart forgejo
+  tags: [forgejo]
+
+- name: Deploy forgejo app.ini
+  ansible.builtin.template:
+    src: app.ini.j2
+    dest: "{{ forgejo_data_dir }}/gitea/conf/app.ini"
+    mode: "0640"
+  notify: Restart forgejo
+  tags: [forgejo, config]
+
+- name: Start forgejo services
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ forgejo_dir }}"
+  register: forgejo_compose_result
+  changed_when: "'Started' in forgejo_compose_result.stderr or 'Creating' in forgejo_compose_result.stderr"
+  tags: [forgejo]
+
+- name: Wait for forgejo to be healthy
+  ansible.builtin.uri:
+    url: "http://localhost:{{ forgejo_http_port }}/api/healthz"
+    method: GET
+    status_code: 200
+  register: forgejo_health
+  retries: 12
+  delay: 5
+  until: forgejo_health.status == 200
+  tags: [forgejo, verify]

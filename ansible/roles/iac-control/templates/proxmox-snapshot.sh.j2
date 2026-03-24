@@ -1,0 +1,94 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Automated Proxmox VM snapshots with retention pruning
+# Runs daily via systemd timer
+
+set -euo pipefail
+
+PROXMOX_API="{{ proxmox_snapshot_api_url }}"
+TOKEN_ID="{{ proxmox_snapshot_token_id }}"
+TOKEN_SECRET="{{ proxmox_snapshot_token_secret }}"
+AUTH_HEADER="PVEAPIToken=${TOKEN_ID}=${TOKEN_SECRET}"
+LOG_FILE="/var/log/proxmox-snapshot.log"
+
+log() { echo "[$(date -Iseconds)] $1" | tee -a "$LOG_FILE"; }
+
+# Wait for a Proxmox task to complete (poll UPID)
+wait_for_task() {
+  local node="$1" upid="$2" timeout=300 elapsed=0
+  local encoded_upid
+  encoded_upid=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$upid', safe=''))")
+
+  while [ $elapsed -lt $timeout ]; do
+    status=$(curl -sk "${PROXMOX_API}/nodes/${node}/tasks/${encoded_upid}/status" \
+      -H "Authorization: ${AUTH_HEADER}" 2>/dev/null)
+    if echo "$status" | grep -q '"status":"stopped"'; then
+      if echo "$status" | grep -q '"exitstatus":"OK"'; then
+        return 0
+      else
+        log "WARNING: Task finished with non-OK status: $status"
+        return 1
+      fi
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+  log "WARNING: Task timed out after ${timeout}s: $upid"
+  return 1
+}
+
+# VMs to snapshot: vmid:node:retention
+SNAPSHOTS=(
+{% for vm in proxmox_snapshot_vms %}
+  "{{ vm.vmid }}:{{ vm.node }}:{{ vm.retention }}"
+{% endfor %}
+)
+
+for entry in "${SNAPSHOTS[@]}"; do
+  IFS=':' read -r vmid node retention <<< "$entry"
+  snap_name="auto-$(date +%Y%m%d-%H%M)"
+
+  log "Creating snapshot $snap_name for VM $vmid on $node"
+
+  response=$(curl -sk -X POST "${PROXMOX_API}/nodes/${node}/qemu/${vmid}/snapshot" \
+    -H "Authorization: ${AUTH_HEADER}" \
+    -d "snapname=${snap_name}" \
+    -d "description=Automated daily snapshot" \
+    -d "vmstate=0" 2>/dev/null)
+
+  if echo "$response" | grep -q '"data"'; then
+    upid=$(echo "$response" | grep -oP '"data":"[^"]*"' | cut -d'"' -f4)
+    log "Snapshot task started for VM $vmid (UPID: $upid)"
+    wait_for_task "$node" "$upid" || log "WARNING: Snapshot task may not have completed for VM $vmid"
+  else
+    log "ERROR: Failed to create snapshot for VM $vmid: $response"
+    continue
+  fi
+
+  # Prune old auto-snapshots beyond retention count
+  log "Pruning old snapshots for VM $vmid (keep ${retention})"
+
+  snaps=$(curl -sk "${PROXMOX_API}/nodes/${node}/qemu/${vmid}/snapshot" \
+    -H "Authorization: ${AUTH_HEADER}" 2>/dev/null \
+    | grep -oP '"name":"auto-[^"]*"' | cut -d'"' -f4 | sort -r)
+
+  count=0
+  for snap in $snaps; do
+    count=$((count + 1))
+    if [ "$count" -gt "$retention" ]; then
+      log "Deleting old snapshot: $snap from VM $vmid"
+      del_response=$(curl -sk -X DELETE \
+        "${PROXMOX_API}/nodes/${node}/qemu/${vmid}/snapshot/${snap}" \
+        -H "Authorization: ${AUTH_HEADER}" 2>/dev/null)
+
+      del_upid=$(echo "$del_response" | grep -oP '"data":"[^"]*"' | cut -d'"' -f4)
+      if [ -n "$del_upid" ]; then
+        wait_for_task "$node" "$del_upid" || log "WARNING: Delete of $snap may not have completed"
+      else
+        log "WARNING: No task ID returned for delete of $snap: $del_response"
+      fi
+    fi
+  done
+done
+
+log "Snapshot automation complete"

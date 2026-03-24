@@ -1,0 +1,89 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Proxmox host firewall — NIST SC-7(5) Deny by Default
+# Applied to: {{ inventory_hostname }} ({{ ansible_host }})
+
+flush ruleset
+
+table inet filter {
+
+    set cluster_nodes {
+        type ipv4_addr
+        elements = {
+{% for node in pve_cluster_nodes %}
+            {{ node }}{{ "," if not loop.last else "" }}
+{% endfor %}
+        }
+    }
+
+    set management_net {
+        type ipv4_addr
+        flags interval
+        elements = { {{ pve_management_network }} }
+    }
+
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # --- Stateful tracking ---
+        ct state established,related accept
+        ct state invalid drop
+
+        # --- Loopback ---
+        iif "lo" accept
+
+        # --- ICMP (ping) from management network ---
+        ip saddr @management_net icmp type echo-request accept
+        ip6 nexthdr ipv6-icmp accept
+
+        # --- SSH from management network ---
+        ip saddr @management_net tcp dport {{ pve_ssh_port }} accept
+
+        # --- PVE API from management network ---
+        ip saddr @management_net tcp dport {{ pve_api_port }} accept
+
+        # --- SPICE proxy from management network ---
+        ip saddr @management_net tcp dport {{ pve_spice_port }} accept
+
+        # --- VNC websocket from management network ---
+        ip saddr @management_net tcp dport {{ pve_vnc_port_start }}-{{ pve_vnc_port_end }} accept
+
+        # --- Corosync cluster communication (UDP) ---
+        ip saddr @cluster_nodes udp dport {{ pve_corosync_port }} accept
+
+        # --- Live migration between cluster nodes (TCP) ---
+        ip saddr @cluster_nodes tcp dport {{ pve_migration_port_start }}-{{ pve_migration_port_end }} accept
+
+        # --- VXLAN overlay (OKD OVN-Kubernetes) ---
+        ip saddr @cluster_nodes udp dport 4789 accept
+
+        # --- Geneve overlay (OKD OVN-Kubernetes) ---
+        ip saddr @cluster_nodes udp dport 6081 accept
+
+        # --- rpcbind localhost only (drop external) ---
+        tcp dport 111 drop
+        udp dport 111 drop
+
+{% if pve_nftables_log_drops %}
+        # --- Log dropped packets ---
+        limit rate {{ pve_nftables_log_rate }} log prefix "nftables-drop: " level warn
+{% endif %}
+
+        # --- Default drop (policy) ---
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+
+        # Proxmox hosts should not route traffic
+        # VM traffic uses bridged networking (not forwarded through host netfilter)
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+
+        # Allow all outbound — host needs DNS, NTP, package updates,
+        # Wazuh agent (1514-1515), syslog (514), etc.
+        # Restricting outbound on hypervisor creates more risk than it mitigates
+    }
+}

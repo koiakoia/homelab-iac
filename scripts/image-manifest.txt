@@ -1,0 +1,56 @@
+# Harbor Image Mirror Manifest
+# Format: SOURCE_IMAGE HARBOR_TARGET
+# Lines starting with # are comments
+#
+# Used by harbor-mirror-images.sh to mirror public images to Harbor
+# Harbor registry: harbor.${INTERNAL_DOMAIN}/sentinel/
+
+# PostgreSQL (used by backstage, harbor, keycloak, netbox)
+docker.io/library/postgres:16 sentinel/postgres:16
+
+# Keycloak
+quay.io/keycloak/keycloak:26.0 sentinel/keycloak:26.0
+
+# Homepage
+ghcr.io/gethomepage/homepage:latest sentinel/homepage:latest
+
+# BusyBox (homepage init container)
+docker.io/library/busybox:1.36 sentinel/busybox:1.36
+
+# LinuxServer.io media apps (seedbox)
+lscr.io/linuxserver/sonarr:latest sentinel/sonarr:latest
+lscr.io/linuxserver/radarr:latest sentinel/radarr:latest
+lscr.io/linuxserver/prowlarr:latest sentinel/prowlarr:latest
+
+# Hello OpenShift (demo app)
+docker.io/openshift/hello-openshift:latest sentinel/hello-openshift:latest
+
+# Newt tunnel
+docker.io/fosrl/newt:1.10.2 sentinel/newt:1.10.2
+
+# Jellyfin
+docker.io/jellyfin/jellyfin:latest sentinel/jellyfin:latest
+
+# Jaeger
+docker.io/jaegertracing/all-in-one:1.62.0 sentinel/jaeger-all-in-one:1.62.0
+
+# Grafana (Helm chart image)
+docker.io/grafana/grafana:12.3.1 sentinel/grafana:12.3.1
+
+# Grafana sidecar (dashboard watcher)
+quay.io/kiwigrid/k8s-sidecar:1.28.0 sentinel/k8s-sidecar:1.28.0
+
+# NetBox (Helm chart image)
+ghcr.io/netbox-community/netbox:v4.5.2 sentinel/netbox:v4.5.2
+
+# Valkey (NetBox Redis subchart)
+# NOTE: Bitnami doesn't publish a bare :9.0.2 tag. Pull :latest (which is 9.0.2)
+# and push as sentinel/valkey:9.0.2. The script handles this via manual tag+push.
+docker.io/bitnami/valkey:latest sentinel/valkey:9.0.2
+
+# Matrix (Synapse + Element Web)
+docker.io/matrixdotorg/synapse:v1.139.2 sentinel/synapse:v1.139.2
+docker.io/vectorim/element-web:v1.12.11 sentinel/element-web:v1.12.11
+
+# ntfy (push notifications)
+docker.io/binwiederhier/ntfy:v2.18.0 sentinel/ntfy:v2.18.0

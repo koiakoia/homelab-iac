@@ -1,0 +1,16 @@
+---
+- name: Reconfigure gitlab
+  ansible.builtin.command:
+    cmd: gitlab-ctl reconfigure
+  tags: [gitlab]
+
+- name: Daemon reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+  tags: [gitlab]
+
+- name: Restart postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: restarted
+  tags: [gitlab, security]

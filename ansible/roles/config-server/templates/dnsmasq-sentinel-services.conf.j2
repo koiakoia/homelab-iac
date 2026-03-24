@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# Sentinel Service DNS - HA mirror of iac-control - NIST SC-7(16), CP-7
+# Resolves *.${INTERNAL_DOMAIN} locally to prevent public DNS topology leak
+address=/.{{ sentinel_dns_domain }}/{{ sentinel_dns_target }}
+# Resolve external-facing *.${DOMAIN} domains internally to avoid Cloudflare round-trip
+address=/auth.${DOMAIN}/{{ sentinel_dns_target }}
+address=/gitlab.${DOMAIN}/{{ sentinel_dns_target }}
+address=/matrix.${DOMAIN}/{{ sentinel_dns_target }}

@@ -1,0 +1,177 @@
+---
+name: DefectDojo Upload
+on:
+  workflow_run:
+    workflows: ["Security Scan", "Lint"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  upload-trivy-iac:
+    runs-on: iac
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    continue-on-error: true
+    steps:
+      - name: Download trivy-iac artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: trivy-iac-report
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+      - name: Upload to DefectDojo
+        if: hashFiles('trivy-iac-report.json') != ''
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          echo "Uploading Trivy IaC scan to DefectDojo..."
+          RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=Trivy Scan" \
+            -F "product_name=Sentinel IaC" \
+            -F "engagement_name=Main Branch CI/CD" \
+            -F "test_title=Trivy IaC Misconfig" \
+            -F "auto_create_context=true" \
+            -F "file=@trivy-iac-report.json" \
+            -F "active=true" \
+            -F "verified=false" \
+            -F "close_old_findings=true" \
+            -F "minimum_severity=Info" \
+            -F "scan_date=$(date +%Y-%m-%d)" \
+            -F "tags=trivy,iac,misconfig" \
+            -w "\n%{http_code}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -lt 400 ] || exit 1
+
+  upload-trivy-config:
+    runs-on: iac
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    continue-on-error: true
+    steps:
+      - name: Download trivy-config artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: trivy-config-report
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+      - name: Upload to DefectDojo
+        if: hashFiles('trivy-config-report.json') != ''
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=Trivy Scan" \
+            -F "product_name=Sentinel IaC" \
+            -F "engagement_name=Main Branch CI/CD" \
+            -F "test_title=Trivy Filesystem Vuln" \
+            -F "auto_create_context=true" \
+            -F "file=@trivy-config-report.json" \
+            -F "active=true" -F "verified=false" -F "close_old_findings=true" \
+            -F "minimum_severity=Info" -F "scan_date=$(date +%Y-%m-%d)" \
+            -F "tags=trivy,config,misconfig" \
+            -w "\n%{http_code}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -lt 400 ] || exit 1
+
+  upload-gitleaks:
+    runs-on: iac
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    continue-on-error: true
+    steps:
+      - name: Download gitleaks artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: gitleaks-report
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+      - name: Upload to DefectDojo
+        if: hashFiles('gitleaks-report.json') != ''
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=Gitleaks Scan" \
+            -F "product_name=Sentinel IaC" \
+            -F "engagement_name=Main Branch CI/CD" \
+            -F "test_title=Gitleaks Secret Detection" \
+            -F "auto_create_context=true" \
+            -F "file=@gitleaks-report.json" \
+            -F "active=true" -F "verified=false" -F "close_old_findings=true" \
+            -F "minimum_severity=Info" -F "scan_date=$(date +%Y-%m-%d)" \
+            -F "tags=gitleaks,secrets" \
+            -w "\n%{http_code}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -lt 400 ] || exit 1
+
+  upload-ansible-lint:
+    runs-on: iac
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    continue-on-error: true
+    steps:
+      - name: Download ansible-lint artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ansible-lint-report
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+      - name: Upload to DefectDojo
+        if: hashFiles('ansible-lint-report.json') != ''
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=SARIF" \
+            -F "product_name=Sentinel IaC" \
+            -F "engagement_name=Main Branch CI/CD" \
+            -F "test_title=Ansible Lint" \
+            -F "auto_create_context=true" \
+            -F "file=@ansible-lint-report.json" \
+            -F "active=true" -F "verified=false" -F "close_old_findings=true" \
+            -F "minimum_severity=Info" -F "scan_date=$(date +%Y-%m-%d)" \
+            -F "tags=ansible,lint,iac" \
+            -w "\n%{http_code}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -lt 400 ] || exit 1
+
+  upload-checkov:
+    runs-on: iac
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    continue-on-error: true
+    steps:
+      - name: Download checkov artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: checkov-report
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+      - name: Upload to DefectDojo
+        if: hashFiles('checkov-report.json') != ''
+        env:
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+            -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+            -F "scan_type=Checkov Scan" \
+            -F "product_name=Sentinel IaC" \
+            -F "engagement_name=Main Branch CI/CD" \
+            -F "test_title=Checkov IaC Analysis" \
+            -F "auto_create_context=true" \
+            -F "file=@checkov-report.json" \
+            -F "active=true" -F "verified=false" -F "close_old_findings=true" \
+            -F "minimum_severity=Info" -F "scan_date=$(date +%Y-%m-%d)" \
+            -F "tags=checkov,iac,packer,docker,terraform" \
+            -w "\n%{http_code}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -lt 400 ] || exit 1

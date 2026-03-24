@@ -1,0 +1,6 @@
+---
+- name: Restart forgejo
+  ansible.builtin.command:
+    cmd: docker compose up -d --force-recreate
+    chdir: "{{ forgejo_dir }}"
+  listen: Restart forgejo

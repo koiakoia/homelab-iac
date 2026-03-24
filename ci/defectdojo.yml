@@ -1,0 +1,194 @@
+# ci/defectdojo.yml - Upload security scan results to DefectDojo
+#
+# Uses reimport-scan with auto_create_context to deduplicate findings across
+# pipeline runs. Each scan type gets a unique test_title so DefectDojo can
+# match and update the existing test rather than creating a new one each run.
+# close_old_findings=true closes findings no longer present in the latest scan.
+---
+
+# NOTE: curl -sk (insecure) is used for DefectDojo uploads because the
+# runner trusts the LE CA but DefectDojo uses an internal TLS cert.
+# Accepted risk: private LAN only, no public transit. Ref: L-16.
+
+.defectdojo-upload:
+  stage: upload-to-defectdojo
+  tags:
+    - iac
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+upload-trivy-iac:
+  extends: .defectdojo-upload
+  needs:
+    - job: trivy-iac
+      artifacts: true
+  script:
+    - |
+      if [ ! -f trivy-iac-report.json ]; then
+        echo "No trivy-iac-report.json found, skipping"
+        exit 0
+      fi
+      echo "Uploading Trivy IaC scan to DefectDojo..."
+      RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+        -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+        -F "scan_type=Trivy Scan" \
+        -F "product_name=Sentinel IaC" \
+        -F "engagement_name=Main Branch CI/CD" \
+        -F "test_title=Trivy IaC Misconfig" \
+        -F "auto_create_context=true" \
+        -F "file=@trivy-iac-report.json" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "minimum_severity=Info" \
+        -F "scan_date=$(date +%Y-%m-%d)" \
+        -F "tags=trivy,iac,misconfig" \
+        -w "\n%{http_code}")
+      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+      echo "HTTP Status: $HTTP_CODE"
+      if [ "$HTTP_CODE" -ge 400 ]; then
+        echo "Upload failed: $(echo "$RESPONSE" | head -1)"
+        exit 1
+      fi
+      echo "Trivy IaC scan uploaded successfully"
+
+upload-trivy-config:
+  extends: .defectdojo-upload
+  needs:
+    - job: trivy-config
+      artifacts: true
+  script:
+    - |
+      if [ ! -f trivy-config-report.json ]; then
+        echo "No trivy-config-report.json found, skipping"
+        exit 0
+      fi
+      echo "Uploading Trivy config scan to DefectDojo..."
+      RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+        -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+        -F "scan_type=Trivy Scan" \
+        -F "product_name=Sentinel IaC" \
+        -F "engagement_name=Main Branch CI/CD" \
+        -F "test_title=Trivy Filesystem Vuln" \
+        -F "auto_create_context=true" \
+        -F "file=@trivy-config-report.json" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "minimum_severity=Info" \
+        -F "scan_date=$(date +%Y-%m-%d)" \
+        -F "tags=trivy,config,misconfig" \
+        -w "\n%{http_code}")
+      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+      echo "HTTP Status: $HTTP_CODE"
+      if [ "$HTTP_CODE" -ge 400 ]; then
+        echo "Upload failed: $(echo "$RESPONSE" | head -1)"
+        exit 1
+      fi
+      echo "Trivy config scan uploaded successfully"
+
+upload-gitleaks:
+  extends: .defectdojo-upload
+  needs:
+    - job: gitleaks
+      artifacts: true
+  script:
+    - |
+      if [ ! -f gitleaks-report.json ]; then
+        echo "No gitleaks-report.json found, skipping"
+        exit 0
+      fi
+      echo "Uploading Gitleaks scan to DefectDojo..."
+      RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+        -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+        -F "scan_type=Gitleaks Scan" \
+        -F "product_name=Sentinel IaC" \
+        -F "engagement_name=Main Branch CI/CD" \
+        -F "test_title=Gitleaks Secret Detection" \
+        -F "auto_create_context=true" \
+        -F "file=@gitleaks-report.json" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "minimum_severity=Info" \
+        -F "scan_date=$(date +%Y-%m-%d)" \
+        -F "tags=gitleaks,secrets" \
+        -w "\n%{http_code}")
+      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+      echo "HTTP Status: $HTTP_CODE"
+      if [ "$HTTP_CODE" -ge 400 ]; then
+        echo "Upload failed: $(echo "$RESPONSE" | head -1)"
+        exit 1
+      fi
+      echo "Gitleaks scan uploaded successfully"
+
+upload-ansible-lint:
+  extends: .defectdojo-upload
+  needs:
+    - job: ansible-lint
+      artifacts: true
+  script:
+    - |
+      if [ ! -f ansible-lint-report.json ]; then
+        echo "No ansible-lint-report.json found, skipping"
+        exit 0
+      fi
+      echo "Uploading Ansible-lint scan to DefectDojo..."
+      RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+        -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+        -F "scan_type=SARIF" \
+        -F "product_name=Sentinel IaC" \
+        -F "engagement_name=Main Branch CI/CD" \
+        -F "test_title=Ansible Lint" \
+        -F "auto_create_context=true" \
+        -F "file=@ansible-lint-report.json" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "minimum_severity=Info" \
+        -F "scan_date=$(date +%Y-%m-%d)" \
+        -F "tags=ansible,lint,iac" \
+        -w "\n%{http_code}")
+      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+      echo "HTTP Status: $HTTP_CODE"
+      if [ "$HTTP_CODE" -ge 400 ]; then
+        echo "Upload failed: $(echo "$RESPONSE" | head -1)"
+        exit 1
+      fi
+      echo "Ansible-lint scan uploaded successfully"
+
+upload-checkov:
+  extends: .defectdojo-upload
+  needs:
+    - job: checkov
+      artifacts: true
+  script:
+    - |
+      if [ ! -f checkov-report.json ]; then
+        echo "No checkov-report.json found, skipping"
+        exit 0
+      fi
+      echo "Uploading Checkov scan to DefectDojo..."
+      RESPONSE=$(curl -sk -X POST "${DEFECTDOJO_URL}/api/v2/reimport-scan/" \
+        -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+        -F "scan_type=Checkov Scan" \
+        -F "product_name=Sentinel IaC" \
+        -F "engagement_name=Main Branch CI/CD" \
+        -F "test_title=Checkov IaC Analysis" \
+        -F "auto_create_context=true" \
+        -F "file=@checkov-report.json" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "minimum_severity=Info" \
+        -F "scan_date=$(date +%Y-%m-%d)" \
+        -F "tags=checkov,iac,packer,docker,terraform" \
+        -w "\n%{http_code}")
+      HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+      echo "HTTP Status: $HTTP_CODE"
+      if [ "$HTTP_CODE" -ge 400 ]; then
+        echo "Upload failed: $(echo "$RESPONSE" | head -1)"
+        exit 1
+      fi
+      echo "Checkov scan uploaded successfully"

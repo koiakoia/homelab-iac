@@ -1,0 +1,227 @@
+http:
+  serversTransports:
+    transport-okd-208:
+      insecureSkipVerify: true
+
+  routers:
+    # --- Meshed services: routed through Istio IngressGateway (mTLS) ---
+    router-home-208:
+      rule: "Host(`home.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls:
+        certResolver: "cloudflare"
+        domains:
+          - main: "${INTERNAL_DOMAIN}"
+            sans:
+              - "*.${INTERNAL_DOMAIN}"
+      middlewares:
+        - "rate-limit@file"
+        - "oauth2-forward-auth@file"
+        - "security-headers@file"
+    # --- ArgoCD: routed via OKD Router (handles its own TLS, no insecure mode) ---
+    router-argocd-208:
+      rule: "Host(`argocd.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-grafana-208:
+      rule: "Host(`grafana.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-jellyfin-208:
+      rule: "Host(`jellyfin.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-sonarr-208:
+      rule: "Host(`sonarr.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-radarr-208:
+      rule: "Host(`radarr.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-prowlarr-208:
+      rule: "Host(`prowlarr.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+    # --- Unmeshed services: routed through OKD Router (no sidecar) ---
+    router-console-208:
+      rule: "Host(`console.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-auth-208:
+      rule: "Host(`auth.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers-keycloak@file"
+    router-kiali-208:
+      rule: "Host(`kiali.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-jaeger-208:
+      rule: "Host(`jaeger.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-netbox-208:
+      rule: "Host(`netbox.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-harbor-208:
+      rule: "Host(`harbor.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-defectdojo-208:
+      rule: "Host(`defectdojo.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-backstage-208:
+      rule: "Host(`backstage.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-console-sec-208:
+      rule: "Host(`console-sec.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-www-208:
+      rule: "Host(`www.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-istio-gateway"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers-public@file"
+    router-plane-208-bypass:
+      rule: "Host(`plane.${INTERNAL_DOMAIN}`) && PathPrefix(`/api/`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 200
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-plane-208:
+      rule: "Host(`plane.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      priority: 100
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "oauth2-forward-auth@file"
+        - "security-headers@file"
+    router-matrix-208:
+      rule: "Host(`matrix.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+    router-ntfy-208:
+      rule: "Host(`ntfy.${INTERNAL_DOMAIN}`)"
+      entryPoints:
+        - "websecure"
+      service: "service-okd-208"
+      tls: {}
+      middlewares:
+        - "rate-limit@file"
+        - "security-headers@file"
+
+  middlewares:
+    strip-forwarded-host:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Host: ""
+
+  services:
+    # Istio IngressGateway via HAProxy (meshed services, HTTP)
+    service-istio-gateway:
+      loadBalancer:
+        servers:
+          - url: "http://${IAC_CONTROL_IP}:8081"
+    # OKD Router via HAProxy (unmeshed services, HTTPS)
+    service-okd-208:
+      loadBalancer:
+        serversTransport: "transport-okd-208"
+        servers:
+          - url: "https://${IAC_CONTROL_IP}:443"

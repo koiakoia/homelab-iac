@@ -1,0 +1,10 @@
+---
+# Vault SSH CA public key - deployed to all managed hosts as /etc/ssh/trusted-ca.pem
+# Allows Vault-signed SSH certificates to authenticate (JIT SSH).
+# Source: vault read -field=public_key ssh/config/ca
+# NIST IA-2, IA-3: Vault PKI-backed certificate authentication
+#
+# To rotate: run `vault write ssh/config/ca generate_signing_key=true` (destroys old CA),
+# then update this value and re-run the common role on all hosts.
+vault_ssh_ca_public_key: >-
+  ssh-rsa AAAA_YOUR_RSA_PUBLIC_KEY

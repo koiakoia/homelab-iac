@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+services:
+  vault:
+    image: hashicorp/vault:{{ vault_version }}
+    container_name: vault
+    restart: always
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+      VAULT_API_ADDR: "http://127.0.0.1:8200"
+    ports:
+      - "8200:8200"
+    volumes:
+      - {{ vault_data_dir }}:/vault/file
+      - {{ vault_config_dir }}:/vault/config
+      - {{ vault_log_dir }}:/vault/logs
+    extra_hosts:
+      - "api.${OKD_CLUSTER}.${DOMAIN}:${IAC_CONTROL_IP}"
+    command: server

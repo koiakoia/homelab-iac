@@ -1,0 +1,153 @@
+---
+
+- name: Validate required secrets are provided
+  ansible.builtin.assert:
+    that:
+      - minio_root_password | default('') | length > 0
+      - b2_account_id | default('') | length > 0
+      - b2_application_key | default('') | length > 0
+      - rclone_crypt_password | default('') | length > 0
+      - rclone_crypt_password2 | default('') | length > 0
+    fail_msg: "Required secrets must be provided. See roles/minio-server/defaults/main.yml for the full list."
+  tags: [minio, validation]
+
+- name: Create minio group
+  ansible.builtin.group:
+    name: minio-user
+    system: true
+  tags: [minio]
+
+- name: Create minio user
+  ansible.builtin.user:
+    name: minio-user
+    group: minio-user
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  tags: [minio]
+
+- name: Download MinIO server binary
+  ansible.builtin.get_url:
+    url: https://dl.min.io/server/minio/release/linux-amd64/minio
+    dest: /usr/local/bin/minio
+    mode: "0755"
+  tags: [minio]
+
+- name: Download MinIO client (mc)
+  ansible.builtin.get_url:
+    url: https://dl.min.io/client/mc/release/linux-amd64/mc
+    dest: /usr/local/bin/mc
+    mode: "0755"
+  tags: [minio]
+
+- name: Create MinIO data directory
+  ansible.builtin.file:
+    path: "{{ minio_data_dir }}"
+    state: directory
+    owner: minio-user
+    group: minio-user
+    mode: "0750"
+  tags: [minio]
+
+- name: Deploy MinIO environment file
+  ansible.builtin.template:
+    src: minio-env.j2
+    dest: /etc/default/minio
+    mode: "0600"
+  notify: Restart minio
+  tags: [minio]
+
+- name: Deploy MinIO systemd service
+  ansible.builtin.template:
+    src: minio.service.j2
+    dest: /etc/systemd/system/minio.service
+    mode: "0644"
+  notify:
+    - Daemon reload
+    - Restart minio
+  tags: [minio]
+
+- name: Enable and start MinIO
+  ansible.builtin.systemd:
+    name: minio
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [minio]
+
+- name: Install rclone
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://rclone.org/install.sh | bash
+    creates: /usr/bin/rclone
+  tags: [minio]
+
+- name: Create rclone config directory
+  ansible.builtin.file:
+    path: /root/.config/rclone
+    state: directory
+    mode: "0700"
+  tags: [minio]
+
+- name: Deploy rclone configuration
+  ansible.builtin.template:
+    src: rclone.conf.j2
+    dest: /root/.config/rclone/rclone.conf
+    mode: "0600"
+  tags: [minio]
+
+- name: Deploy B2 backup script
+  ansible.builtin.template:
+    src: backup-to-b2.sh.j2
+    dest: /usr/local/bin/backup-to-b2.sh
+    mode: "0755"
+  tags: [minio]
+
+- name: Deploy B2 backup systemd service
+  ansible.builtin.template:
+    src: b2-backup.service.j2
+    dest: /etc/systemd/system/b2-backup.service
+    mode: "0644"
+  notify: Daemon reload
+  tags: [minio]
+
+- name: Deploy B2 backup systemd timer
+  ansible.builtin.template:
+    src: b2-backup.timer.j2
+    dest: /etc/systemd/system/b2-backup.timer
+    mode: "0644"
+  notify: Daemon reload
+  tags: [minio]
+
+- name: Enable B2 backup timer
+  ansible.builtin.systemd:
+    name: b2-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [minio]
+
+- name: Wait for MinIO to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ minio_port }}/minio/health/live"
+    status_code: 200
+  register: minio_health
+  retries: 10
+  delay: 3
+  until: minio_health.status == 200
+  tags: [minio]
+
+- name: Configure mc alias for local MinIO
+  ansible.builtin.command:
+    cmd: >
+      mc alias set local http://127.0.0.1:{{ minio_port }}
+      {{ minio_root_user }} {{ minio_root_password }}
+  changed_when: false
+  no_log: true
+  tags: [minio]
+
+- name: Create MinIO buckets
+  ansible.builtin.command:
+    cmd: "mc mb --ignore-existing local/{{ item }}"
+  loop: "{{ minio_buckets }}"
+  changed_when: false
+  tags: [minio]

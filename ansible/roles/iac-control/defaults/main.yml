@@ -1,0 +1,128 @@
+---
+# Default variables for iac-control role
+# Override these in inventory or vars/ as needed
+
+# Package versions (use 'present' for latest, or pin specific versions)
+package_state: present
+
+# Service states
+service_enabled: true
+service_state: started
+
+# Network interface defaults (override in inventory)
+primary_interface: eth0
+okd_interface: ens19
+okd_network: ${OKD_NETWORK}/24
+okd_gateway_ip: ${OKD_NETWORK_GW}
+okd_dhcp_ip: ${OKD_DNS_IP}
+management_network: ${LAN_NETWORK}/24
+
+# HAProxy defaults
+haproxy_stats_bind: 127.0.0.1:9000
+
+# Squid defaults
+squid_port: 3128
+
+# Logging
+enable_iptables_logging: true
+
+# Sentinel LAN DNS (SC-7(16) - prevent external topology discovery)
+sentinel_dns_listen_ip: ${IAC_CONTROL_IP}
+sentinel_dns_domain: ${INTERNAL_DOMAIN}
+sentinel_dns_target: ${PROXY_IP}
+
+# Keepalived VRRP (HA failover)
+keepalived_state: MASTER
+keepalived_priority: 100
+keepalived_vrrp_password: "{{ vault_keepalived_vrrp_password | default('CHANGE_ME') }}"
+keepalived_interface: ens19  # Cluster network interface on iac-control
+keepalived_virtual_router_id: 51
+keepalived_vip: "${OKD_NETWORK_GW}/24"
+
+# Docker users
+docker_users:
+  - ubuntu
+  - gitlab-runner
+
+# Nginx PXE server port (must not conflict with HAProxy on *:80/*:443)
+nginx_pxe_port: 8080
+
+# Proxmox snapshot automation
+proxmox_snapshot_api_url: "https://${PROXMOX_NODE1_IP}:8006/api2/json"
+proxmox_snapshot_token_id: "terraform-prov@pve!api-token"
+proxmox_snapshot_token_secret: "{{ vault_proxmox_snapshot_token_secret | default('CHANGE_ME') }}"
+proxmox_snapshot_schedule: "*-*-* 01:00:00"
+proxmox_snapshot_vms:
+  - {vmid: 200, node: pve, retention: 4}
+  - {vmid: 201, node: pve, retention: 4}
+  - {vmid: 205, node: "proxmox-node-2", retention: 4}
+  - {vmid: 109, node: proxmox-node-3, retention: 4}
+  - {vmid: 107, node: pve, retention: 4}
+  - {vmid: 111, node: "proxmox-node-2", retention: 4}  # wazuh-server
+  - {vmid: 110, node: proxmox-node-3, retention: 4}  # forgejo-server
+
+# iDRAC Redfish — hardware health monitoring and auto-recovery
+idrac_health_check_schedule: "*-*-* *:00/5:00"
+idrac_watchdog_schedule: "*-*-* *:02/5:30"
+idrac_watchdog_fail_threshold: 3
+idrac_watchdog_enabled: true
+idrac_nodes:
+  - name: pve
+    proxmox_ip: ${PROXMOX_NODE1_IP}
+    idrac_ip: ${DNS_IP}
+    idrac_user: root
+    idrac_pass: "{{ vault_idrac_pve_pass | default('CHANGE_ME') }}"
+    model: "PowerEdge R440"
+    generation: "14G"
+  - name: proxmox-node-2
+    proxmox_ip: ${PROXMOX_NODE2_IP}
+    idrac_ip: ${HAPROXY_IP}
+    idrac_user: ${USERNAME}
+    idrac_pass: "{{ vault_idrac_pve2_pass | default('CHANGE_ME') }}"
+    model: "Precision 7920 Rack"
+    generation: "14G"
+  - name: proxmox-node-3
+    proxmox_ip: ${PROXMOX_NODE3_IP}
+    idrac_ip: ${SERVICE_IP_202}
+    idrac_user: root
+    idrac_pass: "{{ vault_idrac_proxmox-node-3_pass | default('CHANGE_ME') }}"
+    model: "PowerEdge R720xd"
+    generation: "12G"
+
+# Sentinel Matrix Bot (alert forwarding to Matrix rooms)
+matrix_bot_homeserver: "https://matrix.${INTERNAL_DOMAIN}"
+matrix_bot_token: "{{ vault_matrix_bot_token | default('CHANGE_ME') }}"
+matrix_room_grafana: "{{ vault_matrix_room_grafana | default('CHANGE_ME') }}"
+matrix_room_wazuh: "{{ vault_matrix_room_wazuh | default('CHANGE_ME') }}"
+matrix_room_gitlab: "{{ vault_matrix_room_gitlab | default('CHANGE_ME') }}"
+
+# Compliance check environment (override via --extra-vars or Vault lookup)
+compliance_vault_token: "{{ vault_compliance_token | default('CHANGE_ME') }}"
+compliance_wazuh_user: "wazuh-wui"
+compliance_wazuh_pass: "{{ vault_wazuh_api_password | default('CHANGE_ME') }}"
+compliance_kubeconfig: "/home/ubuntu/overwatch-repo/auth/kubeconfig"
+compliance_minio_ak: "{{ vault_minio_access_key | default('CHANGE_ME') }}"
+compliance_minio_sk: "{{ vault_minio_secret_key | default('CHANGE_ME') }}"
+compliance_minio_endpoint: "http://${MINIO_PRIMARY_IP}:9000"
+
+# Sentinel Prometheus (standalone — scrapes UniFi, Traefik, Vault, Wazuh)
+prometheus_version: "2.53.3"
+prometheus_port: 9099
+prometheus_retention: "15d"
+prometheus_data_dir: /opt/prometheus-unifi/data
+unifi_exporter_port: 9120
+prometheus_traefik_target: "${PROXY_IP}:8082"
+prometheus_vault_target: "${VAULT_IP}:8200"
+prometheus_vault_enabled: true
+prometheus_vault_token: "{{ vault_prometheus_vault_token | default('CHANGE_ME') }}"
+prometheus_wazuh_target: "172.17.0.1:9101"
+
+# UniFi monitoring stack (collector + exporter)
+unifi_repo_dir: /home/ubuntu/sentinel-unifi
+unifi_api_key: "{{ vault_unifi_api_key | default('CHANGE_ME') }}"
+unifi_gitlab_repo: "http://${GITLAB_IP}/${GITLAB_NAMESPACE}/sentinel-unifi.git"
+
+# NetBox IPAM sync
+netbox_api_endpoint: "https://netbox.${INTERNAL_DOMAIN}"
+netbox_sync_schedule: "*:0/15"
+netbox_sync_enabled: true

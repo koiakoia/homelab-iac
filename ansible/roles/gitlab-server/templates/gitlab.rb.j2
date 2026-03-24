@@ -1,0 +1,44 @@
+# {{ ansible_managed }}
+external_url '{{ gitlab_external_url }}'
+gitlab_rails['backup_keep_time'] = {{ gitlab_backup_keep_time }}
+
+{% if gitlab_oidc_enabled %}
+# Keycloak OIDC SSO
+gitlab_rails['omniauth_enabled'] = true
+gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+gitlab_rails['omniauth_block_auto_created_users'] = {{ gitlab_oidc_block_auto_created_users | lower }}
+{% if gitlab_oidc_auto_sign_in %}
+gitlab_rails['omniauth_auto_sign_in_with_provider'] = 'openid_connect'
+{% endif %}
+gitlab_rails['gitlab_signin_enabled'] = {{ gitlab_signin_enabled | lower }}
+gitlab_rails['omniauth_providers'] = [
+  {
+    name: "openid_connect",
+    label: "{{ gitlab_oidc_label }}",
+    args: {
+      name: "openid_connect",
+      scope: ["openid", "profile", "email"],
+      response_type: "code",
+      issuer: "{{ gitlab_oidc_issuer }}",
+      client_auth_method: "query",
+      discovery: true,
+      uid_field: "preferred_username",
+      pkce: true,
+      client_options: {
+        identifier: "{{ gitlab_oidc_client_id }}",
+        secret: "{{ gitlab_oidc_client_secret }}",
+        redirect_uri: "{{ gitlab_oidc_redirect_uri }}"
+      }
+    }
+  }
+]
+{% endif %}
+
+# Reverse proxy (Traefik terminates TLS)
+nginx['listen_port'] = {{ gitlab_nginx_listen_port }}
+nginx['listen_https'] = {{ gitlab_nginx_listen_https | lower }}
+nginx['proxy_set_headers'] = {
+{% for key, value in gitlab_nginx_proxy_headers.items() %}
+  "{{ key }}" => "{{ value }}"{{ "," if not loop.last else "" }}
+{% endfor %}
+}

@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+concurrent = 1
+check_interval = 0
+connection_max_age = "15m0s"
+shutdown_timeout = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "iac-control-runner-direct"
+  url = "{{ gitlab_runner_url }}"
+  token = "{{ gitlab_runner_token }}"
+  executor = "shell"
+  tag_list = ["{{ gitlab_runner_tags }}"]
+  clone_url = "{{ gitlab_runner_url }}"
+  [runners.cache]
+    MaxUploadedArchiveSize = 0

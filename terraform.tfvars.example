@@ -1,0 +1,20 @@
+# Proxmox Provider
+proxmox_endpoint = "https://192.168.1.10:8006"
+proxmox_username = "root@pam"
+proxmox_password = ""  # Or use PROXMOX_VE_PASSWORD env var
+
+# SSH
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+
+# Node Assignment
+proxmox_node = "pve"
+
+# VM Defaults
+vm_default_gateway = "192.168.1.1"
+vm_dns_servers     = ["192.168.1.1", "1.1.1.1"]
+
+# MinIO State Backend
+minio_endpoint   = "192.168.1.25:9000"
+minio_access_key = ""
+minio_secret_key = ""
+minio_bucket     = "terraform-state"

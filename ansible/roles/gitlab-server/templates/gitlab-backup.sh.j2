@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# GitLab backup - app data + config, upload to MinIO
+set -euo pipefail
+
+source /etc/gitlab-backup.env
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BUCKET="gitlab-backups"
+BACKUP_DIR="/var/opt/gitlab/backups"
+CONFIG_BACKUP="/tmp/gitlab-config-${TIMESTAMP}.tar.gz"
+
+echo "[$(date)] Starting GitLab backup..."
+
+# Application backup (STRATEGY=copy for non-blocking pg_dump)
+STRATEGY=copy gitlab-backup create SKIP={{ gitlab_backup_skip }}
+LATEST_BACKUP=$(ls -t "${BACKUP_DIR}"/*_gitlab_backup.tar 2>/dev/null | head -1)
+
+if [[ -z "${LATEST_BACKUP}" ]]; then
+    echo "[$(date)] ERROR: No backup file found"
+    exit 1
+fi
+echo "[$(date)] App backup created: ${LATEST_BACKUP}"
+
+# Config backup
+tar -czf "${CONFIG_BACKUP}" -C /etc/gitlab gitlab.rb gitlab-secrets.json
+echo "[$(date)] Config backup created: ${CONFIG_BACKUP}"
+
+# Upload to MinIO
+mc alias set backup "${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}" --api S3v4 2>/dev/null || true
+mc cp "${LATEST_BACKUP}" "backup/${BUCKET}/"
+mc cp "${CONFIG_BACKUP}" "backup/${BUCKET}/"
+echo "[$(date)] Uploaded to MinIO ${BUCKET}"
+
+# Cleanup local config backup
+rm -f "${CONFIG_BACKUP}"
+
+# Prune old backups from MinIO (keep 14 days)
+# Pruning failures should not fail the overall backup
+CUTOFF=$(date -d "-14 days" +%Y%m%d)
+mc ls "backup/${BUCKET}/" | awk '{print $NF}' | while read -r file; do
+    FILE_DATE=$(echo "${file}" | grep -oP '\d{4}_\d{2}_\d{2}' | head -1 | tr -d '_')
+    if [[ -n "${FILE_DATE}" && "${FILE_DATE}" -lt "${CUTOFF}" ]]; then
+        mc rm "backup/${BUCKET}/${file}" || true
+        echo "[$(date)] Pruned old backup: ${file}"
+    fi
+done || true
+
+echo "[$(date)] GitLab backup completed successfully"

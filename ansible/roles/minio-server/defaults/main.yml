@@ -1,0 +1,17 @@
+---
+minio_root_user: "minio-admin"
+minio_root_password: ""
+minio_data_dir: "/data/minio"
+minio_port: 9000
+minio_console_port: 9001
+b2_account_id: ""
+b2_application_key: ""
+rclone_crypt_password: ""
+rclone_crypt_password2: ""
+b2_bucket: "sentinel-backups"
+b2_backup_interval: "hourly"
+minio_buckets:
+  - terraform-state
+  - vault-backups
+  - gitlab-backups
+  - etcd-backups

@@ -1,0 +1,126 @@
+---
+- name: daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart haproxy
+  ansible.builtin.systemd:
+    name: haproxy
+    state: restarted
+    enabled: true
+
+- name: restart squid
+  ansible.builtin.systemd:
+    name: squid
+    state: restarted
+    enabled: true
+
+- name: restart dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: restarted
+    enabled: true
+
+- name: restart nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted
+    enabled: true
+
+- name: restart etcd-backup-timer
+  ansible.builtin.systemd:
+    name: etcd-backup.timer
+    state: restarted
+    enabled: true
+
+- name: restart sentinel-matrix-bot
+  ansible.builtin.systemd:
+    name: sentinel-matrix-bot
+    state: restarted
+    enabled: true
+
+- name: restart qbit-proxy
+  ansible.builtin.systemd:
+    name: qbit-proxy
+    state: restarted
+    enabled: true
+
+- name: restart proxmox-snapshot-timer
+  ansible.builtin.systemd:
+    name: proxmox-snapshot.timer
+    state: restarted
+    enabled: true
+
+- name: restart idrac-health-timer
+  ansible.builtin.systemd:
+    name: idrac-health.timer
+    state: restarted
+    enabled: true
+
+- name: restart idrac-watchdog-timer
+  ansible.builtin.systemd:
+    name: idrac-watchdog.timer
+    state: restarted
+    enabled: true
+
+- name: restart keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    state: restarted
+    enabled: true
+
+- name: apply netplan
+  ansible.builtin.command:
+    cmd: netplan apply
+  changed_when: true
+
+- name: reload ufw
+  community.general.ufw:
+    state: reloaded
+
+- name: restart ssh-cert-renewal-timer
+  ansible.builtin.systemd:
+    name: ssh-cert-renewal.timer
+    state: restarted
+    enabled: true
+
+- name: restart wazuh-agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    state: restarted
+    enabled: true
+
+- name: restart netbox-sync-timer
+  ansible.builtin.systemd:
+    name: netbox-sync-proxmox.timer
+    state: restarted
+    enabled: true
+
+- name: restart rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted
+
+- name: restart gitlab-runner-cache-cleanup-timer
+  ansible.builtin.systemd:
+    name: gitlab-runner-cache-cleanup.timer
+    state: restarted
+    enabled: true
+
+- name: restart sentinel-prometheus
+  ansible.builtin.systemd:
+    name: sentinel-prometheus
+    state: restarted
+    enabled: true
+
+- name: restart unifi-exporter
+  ansible.builtin.systemd:
+    name: unifi-exporter
+    state: restarted
+    enabled: true
+
+- name: restart unifi-collector-timer
+  ansible.builtin.systemd:
+    name: unifi-collector.timer
+    state: restarted
+    enabled: true

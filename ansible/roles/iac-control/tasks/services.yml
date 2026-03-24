@@ -1,0 +1,859 @@
+---
+# iac-control role - additional services
+# Binary tools, etcd backup, grafana alerts, qbit proxy, nginx PXE, GitLab Runner
+
+# --- Binary tools ---
+# These are installed manually via scripts/binaries, not apt.
+# We check if they exist and skip if present.
+# Version pinning could be added later for reproducibility.
+
+- name: Check which binary tools are installed
+  ansible.builtin.command:
+    cmd: "which {{ item.name }}"
+  loop: "{{ binary_tools }}"
+  register: binary_tool_checks
+  changed_when: false
+  failed_when: false
+  tags:
+    - services
+    - binary-tools
+
+- name: Display binary tool status
+  ansible.builtin.debug:
+    msg: "{{ item.item.name }}: {{ 'installed' if item.rc == 0 else 'MISSING - install manually' }}"
+  loop: "{{ binary_tool_checks.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  tags:
+    - services
+    - binary-tools
+
+# --- GitLab Runner ---
+# Installed as a standalone binary at /usr/local/bin/gitlab-runner (not via apt).
+# We only check if it exists and deploy config if a token is provided.
+
+- name: Check if GitLab Runner is installed
+  ansible.builtin.command:
+    cmd: which gitlab-runner
+  register: gitlab_runner_check
+  changed_when: false
+  failed_when: false
+  tags:
+    - services
+    - gitlab-runner
+
+- name: Display GitLab Runner status
+  ansible.builtin.debug:
+    msg: "gitlab-runner: {{ 'installed' if gitlab_runner_check.rc == 0 else 'MISSING - install manually' }}"
+  tags:
+    - services
+    - gitlab-runner
+
+- name: Deploy GitLab Runner config
+  ansible.builtin.template:
+    src: gitlab-runner-config.toml.j2
+    dest: /etc/gitlab-runner/config.toml
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - gitlab_runner_check.rc == 0
+    - gitlab_runner_token | length > 0
+  tags:
+    - services
+    - gitlab-runner
+
+# --- etcd backup ---
+
+- name: Deploy etcd backup script
+  ansible.builtin.template:
+    src: etcd-backup.sh.j2
+    dest: /usr/local/bin/etcd-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - etcd-backup
+
+- name: Deploy etcd backup systemd service
+  ansible.builtin.template:
+    src: etcd-backup.service.j2
+    dest: /etc/systemd/system/etcd-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - etcd-backup
+
+- name: Deploy etcd backup systemd timer
+  ansible.builtin.template:
+    src: etcd-backup.timer.j2
+    dest: /etc/systemd/system/etcd-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart etcd-backup-timer
+  tags:
+    - services
+    - etcd-backup
+
+- name: Enable and start etcd backup timer
+  ansible.builtin.systemd:
+    name: etcd-backup.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - etcd-backup
+
+# --- Sentinel Matrix Bot (replaces grafana-alert-receiver) ---
+
+- name: Stop and disable legacy grafana-alert-receiver if present
+  ansible.builtin.systemd:
+    name: grafana-alert-receiver
+    state: stopped
+    enabled: false
+  failed_when: false
+  tags:
+    - services
+    - matrix-bot
+
+- name: Create Sentinel Matrix bot log file
+  ansible.builtin.file:
+    path: "{{ matrix_bot_log }}"
+    state: touch
+    owner: ubuntu
+    group: ubuntu
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  tags:
+    - services
+    - matrix-bot
+
+- name: Deploy Sentinel Matrix bot script
+  ansible.builtin.template:
+    src: sentinel-matrix-bot.py.j2
+    dest: /usr/local/bin/sentinel-matrix-bot.py
+    owner: root
+    group: root
+    mode: "0755"
+  notify: restart sentinel-matrix-bot
+  tags:
+    - services
+    - matrix-bot
+
+- name: Deploy Sentinel Matrix bot environment file
+  ansible.builtin.template:
+    src: sentinel-matrix-bot.env.j2
+    dest: /etc/sentinel/matrix-bot.env
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart sentinel-matrix-bot
+  tags:
+    - services
+    - matrix-bot
+
+- name: Deploy Sentinel Matrix bot systemd service
+  ansible.builtin.template:
+    src: sentinel-matrix-bot.service.j2
+    dest: /etc/systemd/system/sentinel-matrix-bot.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart sentinel-matrix-bot
+  tags:
+    - services
+    - matrix-bot
+
+- name: Enable and start Sentinel Matrix bot
+  ansible.builtin.systemd:
+    name: sentinel-matrix-bot
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - matrix-bot
+
+# --- qBittorrent socat proxy ---
+
+- name: Deploy qBittorrent proxy systemd service
+  ansible.builtin.template:
+    src: qbit-proxy.service.j2
+    dest: /etc/systemd/system/qbit-proxy.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart qbit-proxy
+  tags:
+    - services
+    - qbit-proxy
+
+- name: Enable and start qBittorrent proxy
+  ansible.builtin.systemd:
+    name: qbit-proxy
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - qbit-proxy
+
+# --- Nginx PXE server ---
+
+- name: Create Nginx PXE directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  loop: "{{ nginx_pxe_dirs }}"
+  tags:
+    - services
+    - nginx
+    - pxe
+
+- name: Set ignition directory writable by gitlab-runner (CI pipeline writes here)
+  ansible.builtin.file:
+    path: /var/www/html/ignition
+    state: directory
+    owner: gitlab-runner
+    group: www-data
+    mode: "0775"
+  tags:
+    - services
+    - nginx
+    - pxe
+
+- name: Remove default Nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+  tags:
+    - services
+    - nginx
+    - pxe
+
+- name: Deploy Nginx PXE config to conf.d
+  ansible.builtin.template:
+    src: nginx-pxe.conf.j2
+    dest: /etc/nginx/conf.d/pxe.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart nginx
+  tags:
+    - services
+    - nginx
+    - pxe
+
+- name: Enable and start Nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+  tags:
+    - services
+    - nginx
+
+# --- Proxmox snapshot automation ---
+
+- name: Deploy Proxmox snapshot script
+  ansible.builtin.template:
+    src: proxmox-snapshot.sh.j2
+    dest: /usr/local/bin/proxmox-snapshot.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - proxmox-snapshot
+
+- name: Deploy Proxmox snapshot systemd service
+  ansible.builtin.template:
+    src: proxmox-snapshot.service.j2
+    dest: /etc/systemd/system/proxmox-snapshot.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - proxmox-snapshot
+
+- name: Deploy Proxmox snapshot systemd timer
+  ansible.builtin.template:
+    src: proxmox-snapshot.timer.j2
+    dest: /etc/systemd/system/proxmox-snapshot.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart proxmox-snapshot-timer
+  tags:
+    - services
+    - proxmox-snapshot
+
+- name: Enable and start Proxmox snapshot timer
+  ansible.builtin.systemd:
+    name: proxmox-snapshot.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - proxmox-snapshot
+
+# --- iDRAC Redfish monitoring and recovery ---
+
+- name: Create iDRAC log directory
+  ansible.builtin.file:
+    path: /var/log/sentinel/idrac
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - idrac
+
+- name: Create iDRAC watchdog state directory
+  ansible.builtin.file:
+    path: /var/run/idrac-watchdog
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC credentials env file
+  ansible.builtin.template:
+    src: idrac-recovery.env.j2
+    dest: /etc/idrac-recovery.env
+    owner: root
+    group: root
+    mode: "0600"
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC node recovery script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/idrac-node-recovery.sh"
+    dest: /usr/local/bin/idrac-node-recovery.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC health check script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/idrac-health-check.sh"
+    dest: /usr/local/bin/idrac-health-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC watchdog script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/idrac-watchdog.sh"
+    dest: /usr/local/bin/idrac-watchdog.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC health check systemd service
+  ansible.builtin.template:
+    src: idrac-health.service.j2
+    dest: /etc/systemd/system/idrac-health.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC health check systemd timer
+  ansible.builtin.template:
+    src: idrac-health.timer.j2
+    dest: /etc/systemd/system/idrac-health.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart idrac-health-timer
+  tags:
+    - services
+    - idrac
+
+- name: Enable and start iDRAC health check timer
+  ansible.builtin.systemd:
+    name: idrac-health.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC watchdog systemd service
+  ansible.builtin.template:
+    src: idrac-watchdog.service.j2
+    dest: /etc/systemd/system/idrac-watchdog.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - idrac
+
+- name: Deploy iDRAC watchdog systemd timer
+  ansible.builtin.template:
+    src: idrac-watchdog.timer.j2
+    dest: /etc/systemd/system/idrac-watchdog.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart idrac-watchdog-timer
+  tags:
+    - services
+    - idrac
+
+- name: Enable and start iDRAC watchdog timer
+  ansible.builtin.systemd:
+    name: idrac-watchdog.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - idrac
+
+# --- SSH certificate auto-renewal ---
+
+- name: Deploy SSH cert renewal systemd service
+  ansible.builtin.template:
+    src: ssh-cert-renewal.service.j2
+    dest: /etc/systemd/system/ssh-cert-renewal.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - ssh-cert
+
+- name: Deploy SSH cert renewal systemd timer
+  ansible.builtin.template:
+    src: ssh-cert-renewal.timer.j2
+    dest: /etc/systemd/system/ssh-cert-renewal.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart ssh-cert-renewal-timer
+  tags:
+    - services
+    - ssh-cert
+
+- name: Enable and start SSH cert renewal timer
+  ansible.builtin.systemd:
+    name: ssh-cert-renewal.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - ssh-cert
+
+# --- Compliance environment ---
+
+- name: Create sentinel config directory
+  ansible.builtin.file:
+    path: /etc/sentinel
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - compliance
+
+- name: Deploy compliance environment file
+  ansible.builtin.template:
+    src: compliance.env.j2
+    dest: /etc/sentinel/compliance.env
+    owner: root
+    group: root
+    mode: "0600"
+  tags:
+    - services
+    - compliance
+
+# --- OpenTofu drift detection ---
+
+- name: Deploy OpenTofu drift check script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/tofu-drift-check.sh"
+    dest: /usr/local/bin/tofu-drift-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - tofu-drift
+
+- name: Deploy OpenTofu drift check systemd service
+  ansible.builtin.copy:
+    src: tofu-drift-check.service
+    dest: /etc/systemd/system/tofu-drift-check.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - tofu-drift
+
+- name: Deploy OpenTofu drift check systemd timer
+  ansible.builtin.copy:
+    src: tofu-drift-check.timer
+    dest: /etc/systemd/system/tofu-drift-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+  tags:
+    - services
+    - tofu-drift
+
+- name: Enable and start OpenTofu drift check timer
+  ansible.builtin.systemd:
+    name: tofu-drift-check.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - tofu-drift
+
+# --- Wazuh agent tuning ---
+
+- name: Deploy Wazuh agent local_internal_options to increase event buffer
+  ansible.builtin.copy:
+    content: |
+      # Increased buffer to prevent event queue overflow (L9 alerts during compliance runs)
+      agent.buffer_size=20000
+      agent.events_per_second=1000
+    dest: /var/ossec/etc/local_internal_options.conf
+    owner: root
+    group: wazuh
+    mode: "0640"
+  notify: restart wazuh-agent
+  tags:
+    - services
+    - wazuh
+
+# --- rsyslog dnsmasq filter ---
+
+- name: Deploy rsyslog dnsmasq query filter
+  ansible.builtin.template:
+    src: rsyslog-dnsmasq-filter.conf.j2
+    dest: /etc/rsyslog.d/10-dnsmasq-filter.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart rsyslog
+  tags:
+    - services
+    - dnsmasq
+
+# --- GitLab Runner cache cleanup ---
+
+- name: Deploy GitLab Runner cache cleanup script
+  ansible.builtin.template:
+    src: gitlab-runner-cache-cleanup.sh.j2
+    dest: /usr/local/bin/gitlab-runner-cache-cleanup.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - services
+    - gitlab-runner
+
+- name: Deploy GitLab Runner cache cleanup systemd service
+  ansible.builtin.template:
+    src: gitlab-runner-cache-cleanup.service.j2
+    dest: /etc/systemd/system/gitlab-runner-cache-cleanup.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - gitlab-runner
+
+- name: Deploy GitLab Runner cache cleanup systemd timer
+  ansible.builtin.template:
+    src: gitlab-runner-cache-cleanup.timer.j2
+    dest: /etc/systemd/system/gitlab-runner-cache-cleanup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart gitlab-runner-cache-cleanup-timer
+  tags:
+    - services
+    - gitlab-runner
+
+- name: Enable and start GitLab Runner cache cleanup timer
+  ansible.builtin.systemd:
+    name: gitlab-runner-cache-cleanup.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - gitlab-runner
+
+# --- Sentinel Prometheus ---
+# Standalone Prometheus instance for scraping UniFi, Traefik, Vault, Wazuh metrics.
+# Grafana in OKD uses this as a secondary datasource (http://${IAC_CONTROL_IP}:9099).
+
+- name: Download Prometheus {{ prometheus_version }}
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: /tmp/prometheus-{{ prometheus_version }}.tar.gz
+    mode: "0644"
+  tags:
+    - services
+    - prometheus
+
+- name: Extract Prometheus binary
+  ansible.builtin.unarchive:
+    src: /tmp/prometheus-{{ prometheus_version }}.tar.gz
+    dest: /tmp/
+    remote_src: true
+    creates: /tmp/prometheus-{{ prometheus_version }}.linux-amd64/prometheus
+  tags:
+    - services
+    - prometheus
+
+- name: Install Prometheus binary
+  ansible.builtin.copy:
+    src: /tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}
+    dest: /usr/local/bin/{{ item }}
+    mode: "0755"
+    remote_src: true
+  loop:
+    - prometheus
+    - promtool
+  notify:
+    - restart sentinel-prometheus
+  tags:
+    - services
+    - prometheus
+
+- name: Create Prometheus directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: nobody
+    group: nogroup
+    mode: "0755"
+  loop:
+    - /etc/prometheus
+    - /opt/prometheus-unifi
+    - "{{ prometheus_data_dir }}"
+  tags:
+    - services
+    - prometheus
+
+- name: Deploy Prometheus config
+  ansible.builtin.template:
+    src: sentinel-prometheus.yml.j2
+    dest: /opt/prometheus-unifi/prometheus.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: "0644"
+  notify:
+    - restart sentinel-prometheus
+  tags:
+    - services
+    - prometheus
+
+- name: Create Prometheus config symlink
+  ansible.builtin.file:
+    src: /opt/prometheus-unifi/prometheus.yml
+    dest: /etc/prometheus/prometheus.yml
+    state: link
+    force: true
+  tags:
+    - services
+    - prometheus
+
+- name: Deploy sentinel-prometheus.service
+  ansible.builtin.template:
+    src: sentinel-prometheus.service.j2
+    dest: /etc/systemd/system/sentinel-prometheus.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart sentinel-prometheus
+  tags:
+    - services
+    - prometheus
+
+- name: Enable and start sentinel-prometheus
+  ansible.builtin.systemd:
+    name: sentinel-prometheus
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - prometheus
+
+- name: Clean up Prometheus tarball
+  ansible.builtin.file:
+    path: /tmp/prometheus-{{ prometheus_version }}.tar.gz
+    state: absent
+  tags:
+    - services
+    - prometheus
+
+# --- UniFi monitoring stack (collector + exporter) ---
+# Collector runs every 5 minutes via systemd timer, writes JSON snapshot.
+# Exporter is a long-running HTTP server exposing Prometheus metrics at :9120.
+
+- name: Clone sentinel-unifi repository
+  ansible.builtin.git:
+    repo: "{{ unifi_gitlab_repo }}"
+    dest: "{{ unifi_repo_dir }}"
+    version: main
+    update: true
+    force: false
+  become: true
+  become_user: ubuntu
+  tags:
+    - services
+    - unifi
+
+- name: Create UniFi collector log directory
+  ansible.builtin.file:
+    path: /var/log/sentinel/unifi
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: "0755"
+  tags:
+    - services
+    - unifi
+
+- name: Deploy unifi-exporter.service
+  ansible.builtin.template:
+    src: unifi-exporter.service.j2
+    dest: /etc/systemd/system/unifi-exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart unifi-exporter
+  tags:
+    - services
+    - unifi
+
+- name: Deploy unifi-collector.service
+  ansible.builtin.template:
+    src: unifi-collector.service.j2
+    dest: /etc/systemd/system/unifi-collector.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: daemon-reload
+  tags:
+    - services
+    - unifi
+
+- name: Deploy unifi-collector.timer
+  ansible.builtin.template:
+    src: unifi-collector.timer.j2
+    dest: /etc/systemd/system/unifi-collector.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - daemon-reload
+    - restart unifi-collector-timer
+  tags:
+    - services
+    - unifi
+
+- name: Enable and start unifi-exporter
+  ansible.builtin.systemd:
+    name: unifi-exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - unifi
+
+- name: Enable and start unifi-collector timer
+  ansible.builtin.systemd:
+    name: unifi-collector.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags:
+    - services
+    - unifi
+
+# --- Docker group membership ---
+
+- name: Add users to docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+  when: docker_users | length > 0
+  tags:
+    - services
+    - docker

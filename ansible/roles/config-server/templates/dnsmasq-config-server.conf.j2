@@ -1,0 +1,44 @@
+# {{ ansible_managed }}
+# config-server DNS Configuration (DNS-only, no DHCP)
+# HA failover for OKD cluster DNS
+# Network: {{ okd_network }}
+# Domain: ${OKD_CLUSTER}.${DOMAIN}
+
+log-queries
+
+# --- Interface Binding ---
+# Listen on config-server IP, LAN IP (for DNS HA), and localhost
+# bind-dynamic allows dnsmasq to also accept on VIP (${OKD_NETWORK_GW}) when present
+listen-address={{ config_server_ip }}
+listen-address={{ config_server_lan_ip }}
+listen-address=127.0.0.1
+bind-dynamic
+except-interface=fan-*
+
+# --- DNS Configuration ---
+domain=${OKD_CLUSTER}.${DOMAIN}
+# Answer queries for this domain from /etc/hosts or DHCP
+local=/${OKD_CLUSTER}.${DOMAIN}/
+expand-hosts
+
+# --- Static DNS Records (Load Balancer) ---
+# These point to the VIP which floats between iac-control and config-server
+address=/api.${OKD_CLUSTER}.${DOMAIN}/{{ okd_gateway_ip }}
+address=/api-int.${OKD_CLUSTER}.${DOMAIN}/{{ okd_gateway_ip }}
+address=/.apps.${OKD_CLUSTER}.${DOMAIN}/{{ okd_gateway_ip }}
+
+# --- External Service DNS Override ---
+# Resolve auth.${DOMAIN} internally for OKD pod→Keycloak OIDC token exchange
+address=/auth.${DOMAIN}/${PROXY_IP}
+
+# --- DNSSEC Validation (SC-20/SC-21/SC-22) ---
+# Validate DNSSEC signatures on responses from upstream resolvers
+dnssec
+# Root zone trust anchor (KSK tag 20326, algorithm 8, SHA-256)
+trust-anchor=.,20326,8,2,E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D
+# Do NOT enable dnssec-check-unsigned — would break resolution for unsigned domains
+
+# --- Upstream Forwarding ---
+{% for server in dns_upstream_servers %}
+server={{ server }}
+{% endfor %}

@@ -1,0 +1,40 @@
+---
+# Proxmox bare metal host hardening playbook
+# SEC-2: nftables firewall + common hardening
+#
+# SAFETY: serial=1 ensures one node at a time.
+# If firewall deployment fails on one node, the others remain untouched.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/proxmox-host.yml
+#
+# Dry run:
+#   ansible-playbook -i inventory/hosts.yml playbooks/proxmox-host.yml --check --diff
+
+- name: Harden Proxmox bare metal hosts
+  hosts: proxmox
+  become: true
+  serial: 1
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify we are on a Proxmox host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+        fail_msg: "This playbook is for Proxmox (Debian-based) hosts only"
+      tags:
+        - always
+
+    - name: Display target host info
+      ansible.builtin.debug:
+        msg: "Configuring {{ inventory_hostname }} ({{ ansible_host }})"
+      tags:
+        - always
+
+  roles:
+    - role: proxmox-host
+      tags:
+        - proxmox
+        - firewall
+        - nftables

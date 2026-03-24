@@ -1,0 +1,24 @@
+---
+- name: Configure Forgejo server
+  hosts: forgejo
+  become: true
+  vars:
+    docker_users: [${USERNAME}]
+  roles:
+    - role: common
+      tags: [common]
+    - role: docker-host
+      tags: [docker]
+    - role: forgejo-server
+      tags: [forgejo]
+  post_tasks:
+    - name: Reminder - Forgejo post-deploy steps
+      ansible.builtin.debug:
+        msg: >
+          Forgejo is deployed. Next steps:
+          1. Create Keycloak OIDC client 'forgejo' in sentinel realm
+          2. Store secrets in Vault at secret/forgejo
+          3. Re-run with -e flags for OIDC and DB credentials
+          4. Visit {{ forgejo_root_url }} to verify
+          5. Create organization structure and agent accounts
+      tags: [forgejo]

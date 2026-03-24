@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+[Unit]
+Description=GitLab Runner cache cleanup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gitlab-runner-cache-cleanup.sh

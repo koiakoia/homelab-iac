@@ -1,0 +1,31 @@
+---
+forgejo_dir: "/opt/forgejo"
+forgejo_data_dir: "/opt/forgejo/data"
+forgejo_postgres_dir: "/opt/forgejo/postgres"
+
+forgejo_http_port: 3000
+forgejo_ssh_port: 2222
+
+forgejo_domain: "forgejo.${INTERNAL_DOMAIN}"
+forgejo_root_url: "https://forgejo.${INTERNAL_DOMAIN}"
+
+forgejo_image: "codeberg.org/forgejo/forgejo:11"
+forgejo_postgres_image: "postgres:16-alpine"
+forgejo_runner_image: "codeberg.org/forgejo/runner:6"
+
+# Database
+forgejo_db_name: "forgejo"
+forgejo_db_user: "forgejo"
+forgejo_db_password: ""
+
+# Keycloak OIDC
+forgejo_oidc_enabled: true
+forgejo_oidc_provider: "keycloak"
+forgejo_oidc_client_id: "forgejo"
+forgejo_oidc_client_secret: ""
+forgejo_oidc_discovery_url: "https://auth.${DOMAIN}/realms/sentinel/.well-known/openid-configuration"
+forgejo_oidc_auto_discover: true
+forgejo_oidc_scopes: "openid email profile"
+
+# act_runner registration token (generated from Forgejo admin)
+forgejo_runner_token: ""

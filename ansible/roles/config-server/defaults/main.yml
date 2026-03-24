@@ -1,0 +1,27 @@
+---
+# Default variables for config-server role
+# Override these in inventory or group_vars as needed
+
+# Keepalived VRRP (HA failover) - NIST CP-7
+keepalived_state: BACKUP
+keepalived_priority: 50
+keepalived_vrrp_password: "{{ vault_keepalived_vrrp_password | default('CHANGE_ME') }}"  # 8-char max (VRRP limit)
+keepalived_interface: eth0  # First interface on config-server VM (cluster network)
+keepalived_virtual_router_id: 51
+keepalived_vip: "${OKD_NETWORK_GW}/24"
+
+# Network
+config_server_ip: "${OKD_GATEWAY}"
+config_server_lan_ip: "${OKD_WORKER_IP}"
+iac_control_ip: "${OKD_NETWORK_GW}"
+
+# Sentinel LAN DNS (HA mirror of iac-control - NIST SC-7(16), CP-7)
+sentinel_dns_domain: ${INTERNAL_DOMAIN}
+sentinel_dns_target: ${PROXY_IP}
+
+# PXE sync settings
+pxe_sync_source: "ubuntu@${IAC_CONTROL_IP}"
+pxe_sync_ssh_key: "/home/ubuntu/.ssh/id_sentinel"
+pxe_sync_dirs:
+  - /var/www/html/scos/
+  - /var/www/html/ignition/

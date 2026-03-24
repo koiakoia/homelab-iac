@@ -1,0 +1,28 @@
+---
+# External access
+gitlab_external_url: "https://gitlab.${DOMAIN}"
+gitlab_backup_keep_time: 1209600
+gitlab_backup_skip: "artifacts,builds,pages,registry,packages,terraform_state"
+
+# MinIO backup credentials (pass via extra-vars)
+minio_endpoint: "http://${MINIO_PRIMARY_IP}:9000"
+minio_access_key: ""
+minio_secret_key: ""
+
+# Nginx reverse proxy (TLS terminated by Traefik)
+gitlab_nginx_listen_port: 80
+gitlab_nginx_listen_https: false
+gitlab_nginx_proxy_headers:
+  X-Forwarded-Proto: "https"
+  X-Forwarded-Ssl: "on"
+
+# Keycloak OIDC SSO
+gitlab_oidc_enabled: true
+gitlab_oidc_label: "Keycloak"
+gitlab_oidc_issuer: "https://auth.${DOMAIN}/realms/sentinel"
+gitlab_oidc_client_id: "gitlab"
+gitlab_oidc_client_secret: ""
+gitlab_oidc_redirect_uri: "https://gitlab.${DOMAIN}/users/auth/openid_connect/callback"
+gitlab_oidc_auto_sign_in: true
+gitlab_oidc_block_auto_created_users: false
+gitlab_signin_enabled: false
